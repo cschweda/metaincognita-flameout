@@ -2,6 +2,37 @@
 
 All notable changes to Flameout will be documented in this file.
 
+## [0.2.0] - 2026-04-05
+
+### Added
+
+- Jet sprite with afterburner flame trail replacing the plain dot at the curve tip
+- Particle system: trail particles during flight, 24-particle radial burst on crash
+- "How to Play" modal shown on first visit explaining the three-step game flow
+- "New Game" button in game header with confirmation modal to reset session
+- Hover tooltips on history strip badges showing round details, payout math, and dollar explanations
+- Win/loss indicators (checkmark/X) on history strip badges
+- Spacebar keyboard hint in controls bar
+- GitHub link in bottom status bar
+
+### Changed
+
+- Cash-out button is now a large, full-width, pulsing amber button during RUNNING phase (previously a small generic button)
+- Place Bet button is now a large green gradient button
+- Round stops immediately on cashout instead of continuing to the crash point
+- Multiplier display shows profit/loss amount after round ends (green for wins, red for losses)
+- Phase badge shows green "Cashed out at X.XX×" on successful cashout instead of red crash message
+- Auto-bet now places bet and starts round immediately instead of waiting for betting window timer
+- History strip label changed from "History" to "Crash points" for clarity
+- Start Game button on setup screen enlarged with gradient styling
+
+### Fixed
+
+- Phantom rounds no longer fill history strip when player isn't betting (removed 5-second auto-loop)
+- Rounds with no bet placed are no longer recorded to history
+- Modal accessibility warnings resolved: all UModal instances now use title/description props for screen reader support
+- History strip tooltips now render correctly (switched from clipped custom div to Nuxt UI UTooltip portal)
+
 ## [0.1.0] - 2026-04-05
 
 ### Added

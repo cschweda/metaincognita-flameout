@@ -27,13 +27,18 @@ The format was born in the cryptocurrency casino community in 2014 and has since
 
 ### Core Game
 - Single-player crash game with full round lifecycle (WAITING → RUNNING → CRASHED → SETTLING)
-- Real-time animated multiplier curve on HTML canvas
-- Manual cash-out button and auto-cashout target
-- Auto-bet for consecutive automated rounds
+- Real-time animated multiplier curve on HTML canvas with jet sprite and afterburner flame trail
+- Particle effects: trail particles during flight, explosion burst on crash
+- Large, prominent action buttons: green "Place Bet", pulsing amber "CASH OUT"
+- Round stops immediately on cashout with profit/loss display
+- Auto-cashout: set a target multiplier for automatic cashout
+- Auto-bet: automatically places the same bet each round (starts immediately, no waiting)
 - Configurable house edge: 1% (99% RTP), 3% (97% RTP), 5% (95% RTP), or custom
 - Adjustable game speed (0.5× to 5×)
 - Simulated bankroll with session persistence (localStorage)
-- Color-coded round history strip
+- Color-coded crash point history strip with hover tooltips showing round details and payout math
+- "How to Play" modal on first visit
+- New Game button to reset session
 
 ### Analytics & Education
 - **Probability Explorer**: Enter any multiplier target and see the exact probability, implied odds, break-even rate, and EV
@@ -45,8 +50,9 @@ The format was born in the cryptocurrency casino community in 2014 and has since
 ### UI
 - Dark mode interface (Bloomberg terminal aesthetic)
 - Setup screen → Game screen with right-hand stats sidebar
-- Bottom navigation: History and Analysis pages
+- Bottom navigation: History and Analysis pages with GitHub link
 - Keyboard controls (Space to bet/cashout)
+- Accessible modals with screen reader support
 - Responsive layout
 
 ---
