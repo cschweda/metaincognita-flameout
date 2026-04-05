@@ -101,6 +101,15 @@ export function useFlameoutEngine() {
     const multiplier = store.currentRound.currentMultiplier
     store.cashOut(multiplier)
 
+    // Stop the round immediately — don't keep running to the crash
+    stopAnimation()
+    store.setPhase('CRASHED') // reuse CRASHED phase to show result
+
+    // Settle after a brief pause to show the cashout result
+    setTimeout(() => {
+      settle()
+    }, 1500)
+
     return true
   }
 

@@ -47,11 +47,15 @@ onUnmounted(() => {
 
 const showSidebar = ref(true)
 
+const didCashOut = computed(() => store.currentRound?.cashedOut === true)
+
 const phaseLabel = computed(() => {
   switch (store.phase) {
     case 'WAITING': return 'Place Your Bet'
     case 'RUNNING': return 'LIVE'
-    case 'CRASHED': return `Crashed at ${formatMultiplier(store.currentRound?.crashPoint || 0)}`
+    case 'CRASHED':
+      if (didCashOut.value) return `Cashed out at ${formatMultiplier(store.currentRound?.cashoutMultiplier || 0)}`
+      return `Crashed at ${formatMultiplier(store.currentRound?.crashPoint || 0)}`
     case 'SETTLING': return 'Settling...'
     case 'BUSTED': return 'Busted!'
     default: return ''
@@ -62,7 +66,9 @@ const phaseBadgeClass = computed(() => {
   switch (store.phase) {
     case 'WAITING': return 'bg-blue-600/80 text-blue-100'
     case 'RUNNING': return 'bg-emerald-600/80 text-emerald-100 animate-pulse'
-    case 'CRASHED': return 'bg-red-600/80 text-red-100'
+    case 'CRASHED':
+      if (didCashOut.value) return 'bg-emerald-600/80 text-emerald-100'
+      return 'bg-red-600/80 text-red-100'
     case 'BUSTED': return 'bg-red-700/80 text-red-100'
     default: return 'bg-neutral-700 text-neutral-300'
   }
@@ -70,6 +76,7 @@ const phaseBadgeClass = computed(() => {
 
 const multiplierColor = computed(() => {
   const m = store.currentRound?.currentMultiplier || 1
+  if (store.phase === 'CRASHED' && didCashOut.value) return 'text-emerald-400'
   if (store.phase === 'CRASHED') return 'text-red-500'
   if (m >= 10) return 'text-red-400'
   if (m >= 5) return 'text-orange-400'
@@ -123,12 +130,29 @@ const multiplierColor = computed(() => {
 
         <!-- Multiplier display -->
         <div class="flex items-center justify-center py-3 shrink-0">
-          <div
-            v-if="store.phase === 'RUNNING' || store.phase === 'CRASHED'"
-            class="text-5xl font-bold font-mono tabular-nums transition-colors"
-            :class="multiplierColor"
-          >
-            {{ formatMultiplier(store.currentRound?.currentMultiplier || 1) }}
+          <div v-if="store.phase === 'RUNNING'" class="text-center">
+            <div
+              class="text-5xl font-bold font-mono tabular-nums transition-colors"
+              :class="multiplierColor"
+            >
+              {{ formatMultiplier(store.currentRound?.currentMultiplier || 1) }}
+            </div>
+          </div>
+          <div v-else-if="store.phase === 'CRASHED' && didCashOut" class="text-center">
+            <div class="text-5xl font-bold font-mono tabular-nums text-emerald-400">
+              {{ formatMultiplier(store.currentRound?.cashoutMultiplier || 1) }}
+            </div>
+            <div class="text-emerald-400/80 text-lg font-mono mt-1">
+              +{{ formatCents(Math.floor((store.currentRound?.betAmount || 0) * (store.currentRound?.cashoutMultiplier || 0)) - (store.currentRound?.betAmount || 0)) }}
+            </div>
+          </div>
+          <div v-else-if="store.phase === 'CRASHED'" class="text-center">
+            <div class="text-5xl font-bold font-mono tabular-nums text-red-500">
+              {{ formatMultiplier(store.currentRound?.crashPoint || 1) }}
+            </div>
+            <div class="text-red-400/80 text-lg font-mono mt-1">
+              -{{ formatCents(store.currentRound?.betAmount || 0) }}
+            </div>
           </div>
           <div
             v-else-if="store.phase === 'BUSTED'"
