@@ -46,6 +46,14 @@ onUnmounted(() => {
 })
 
 const showSidebar = ref(true)
+const showNewGameConfirm = ref(false)
+
+function confirmNewGame() {
+  showNewGameConfirm.value = false
+  engine.cleanup()
+  store.clearSession()
+  router.replace('/')
+}
 
 const didCashOut = computed(() => store.currentRound?.cashedOut === true)
 
@@ -108,6 +116,13 @@ const multiplierColor = computed(() => {
           @click="showSidebar = !showSidebar"
         >
           <UIcon :name="showSidebar ? 'i-lucide-panel-right-close' : 'i-lucide-panel-right-open'" class="w-4 h-4" />
+        </button>
+        <button
+          class="text-neutral-500 hover:text-red-400 transition-colors text-xs flex items-center gap-1"
+          @click="showNewGameConfirm = true"
+        >
+          <UIcon name="i-lucide-rotate-ccw" class="w-3.5 h-3.5" />
+          New Game
         </button>
       </div>
     </header>
@@ -183,5 +198,33 @@ const multiplierColor = computed(() => {
         <FlameoutStats />
       </aside>
     </div>
+
+    <!-- New game confirmation -->
+    <UModal v-model:open="showNewGameConfirm">
+      <template #content>
+        <div class="p-6 space-y-4">
+          <h3 class="text-lg font-semibold text-neutral-100">
+            Start New Game?
+          </h3>
+          <p class="text-sm text-neutral-400">
+            This will clear your current session ({{ store.bankroll.roundsPlayed }} rounds, {{ formatCents(store.profitLoss) }} P&L) and return to the setup screen.
+          </p>
+          <div class="flex justify-end gap-2">
+            <UButton
+              color="neutral"
+              variant="outline"
+              label="Cancel"
+              @click="showNewGameConfirm = false"
+            />
+            <UButton
+              color="red"
+              label="New Game"
+              icon="i-lucide-rotate-ccw"
+              @click="confirmNewGame"
+            />
+          </div>
+        </div>
+      </template>
+    </UModal>
   </div>
 </template>
