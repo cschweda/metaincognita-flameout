@@ -18,12 +18,14 @@ export function useFlameoutEngine() {
     const crashPoint = generateCrashPoint(store.settings.houseEdgePercent)
     store.startRound(crashPoint)
 
-    // Auto-place bet if auto-bet is enabled
+    // Auto-place bet and start immediately if auto-bet is enabled
     if (store.settings.autoBet && store.pendingBet <= store.bankroll.balance) {
       placeBet(store.pendingBet)
+      startRunningPhase()
+      return
     }
 
-    // Start countdown — auto-start running phase after betting window
+    // Otherwise wait for manual bet — auto-start after betting window if bet was placed
     bettingTimerId.value = setTimeout(() => {
       if (store.phase === 'WAITING' && store.currentRound?.betAmount && store.currentRound.betAmount > 0) {
         startRunningPhase()
