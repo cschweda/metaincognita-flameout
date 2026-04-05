@@ -148,6 +148,9 @@ const multiplierColor = computed(() => {
         <FlameoutHistoryStrip />
       </div>
 
+      <!-- How to play overlay (first visit) -->
+      <FlameoutHowToPlay />
+
       <!-- Right: stats sidebar -->
       <aside
         class="border-l border-neutral-800 shrink-0 transition-all duration-300 overflow-hidden"
