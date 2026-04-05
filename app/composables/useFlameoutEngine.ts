@@ -25,16 +25,8 @@ export function useFlameoutEngine() {
       return
     }
 
-    // Otherwise wait for manual bet — auto-start after betting window if bet was placed
-    bettingTimerId.value = setTimeout(() => {
-      if (store.phase === 'WAITING' && store.currentRound?.betAmount && store.currentRound.betAmount > 0) {
-        startRunningPhase()
-      } else if (store.phase === 'WAITING') {
-        // No bet placed — skip to next round
-        store.settleRound()
-        startBettingPhase()
-      }
-    }, store.settings.bettingWindowMs)
+    // Otherwise wait for the player to manually place a bet — no timeout loop.
+    // The round starts when the player clicks "Place Bet".
   }
 
   function placeBet(amountCents: number) {

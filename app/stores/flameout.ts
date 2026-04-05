@@ -177,6 +177,13 @@ export const useFlameoutStore = defineStore('flameout', {
       if (!this.currentRound) return
 
       const round = this.currentRound
+
+      // Don't record rounds where no bet was placed
+      if (round.betAmount === 0) {
+        this.currentRound = null
+        return
+      }
+
       const won = round.cashedOut
       const payout = won ? Math.floor(round.betAmount * (round.cashoutMultiplier || 0)) : 0
       const profit = payout - round.betAmount
