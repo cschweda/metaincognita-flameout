@@ -91,28 +91,24 @@ function navigateTo(path: string) {
     </nav>
 
     <!-- Leave confirmation modal -->
-    <UModal v-model:open="showLeaveConfirm">
-      <template #content>
-        <div class="p-6 space-y-4">
-          <h3 class="text-lg font-semibold text-neutral-100">
-            Leave Game?
-          </h3>
-          <p class="text-sm text-neutral-400">
-            Your session will be saved. You can resume later from the setup screen.
-          </p>
-          <div class="flex justify-end gap-2">
-            <UButton
-              color="neutral"
-              variant="outline"
-              label="Cancel"
-              @click="showLeaveConfirm = false"
-            />
-            <UButton
-              color="amber"
-              label="Leave & Save"
-              @click="confirmLeave"
-            />
-          </div>
+    <UModal
+      v-model:open="showLeaveConfirm"
+      title="Leave Game?"
+      description="Your session will be saved. You can resume later from the setup screen."
+    >
+      <template #body>
+        <div class="flex justify-end gap-2">
+          <UButton
+            color="neutral"
+            variant="outline"
+            label="Cancel"
+            @click="showLeaveConfirm = false"
+          />
+          <UButton
+            color="amber"
+            label="Leave & Save"
+            @click="confirmLeave"
+          />
         </div>
       </template>
     </UModal>
