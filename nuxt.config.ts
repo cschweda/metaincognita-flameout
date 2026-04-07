@@ -10,6 +10,10 @@ export default defineNuxtConfig({
 
   spaLoadingTemplate: true,
 
+  nitro: {
+    preset: 'netlify_static'
+  },
+
   devtools: {
     enabled: true
   },
