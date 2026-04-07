@@ -1,7 +1,11 @@
 <script setup lang="ts">
+import { GAME_MODES } from '~/types/flameout'
+import type { GameMode } from '~/types/flameout'
+
 const router = useRouter()
 const store = useFlameoutStore()
 
+const gameMode = ref<GameMode>('classic')
 const houseEdge = ref(3)
 const startingBankroll = ref(1000)
 const speedFactor = ref(1)
@@ -34,7 +38,8 @@ function startGame() {
   store.initializeGame({
     houseEdgePercent: houseEdge.value,
     startingBankroll: startingBankroll.value,
-    speedFactor: speedFactor.value
+    speedFactor: speedFactor.value,
+    gameMode: gameMode.value
   })
   router.push('/game')
 }
@@ -56,6 +61,34 @@ function resumeGame() {
         <p class="text-neutral-500 text-sm">
           A crash game simulator. No real money. Just math.
         </p>
+      </div>
+
+      <!-- Game Mode selector -->
+      <div class="space-y-3">
+        <label class="text-sm font-medium text-neutral-300 block text-center">Game Mode</label>
+        <div class="grid grid-cols-3 gap-3 max-w-[640px] mx-auto">
+          <button
+            v-for="mode in GAME_MODES"
+            :key="mode.id"
+            class="rounded-xl border p-4 text-left transition-all relative overflow-hidden"
+            :class="gameMode === mode.id
+              ? 'border-amber-500 bg-amber-500/10 ring-1 ring-amber-500/30'
+              : 'border-neutral-700 bg-neutral-800/50 hover:border-neutral-600'"
+            @click="gameMode = mode.id"
+          >
+            <div class="flex items-center gap-2 mb-1">
+              <UIcon :name="mode.icon" class="w-4 h-4" :class="gameMode === mode.id ? 'text-amber-400' : 'text-neutral-500'" />
+              <span class="font-bold text-sm" :class="gameMode === mode.id ? 'text-amber-400' : 'text-neutral-300'">{{ mode.name }}</span>
+            </div>
+            <p class="text-[10px] text-neutral-500 leading-tight">
+              {{ mode.description }}
+            </p>
+            <div
+              v-if="gameMode === mode.id"
+              class="absolute top-2 right-2 w-2 h-2 rounded-full bg-amber-400"
+            />
+          </button>
+        </div>
       </div>
 
       <!-- Resume banner -->

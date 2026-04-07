@@ -39,7 +39,10 @@ export const useFlameoutStore = defineStore('flameout', {
     pendingBet: 1000, // $10.00 default
 
     // UI state
-    selectedChipValue: 1000
+    selectedChipValue: 1000,
+
+    // Jackpot mode: suspend crash while spinning
+    jackpotSpinActive: false
   }),
 
   getters: {
@@ -99,7 +102,8 @@ export const useFlameoutStore = defineStore('flameout', {
         ...DEFAULT_SETTINGS,
         houseEdgePercent: config.houseEdgePercent,
         startingBankroll: bankrollCents,
-        speedFactor: config.speedFactor
+        speedFactor: config.speedFactor,
+        gameMode: config.gameMode || 'classic'
       }
 
       this.bankroll = {
@@ -175,6 +179,7 @@ export const useFlameoutStore = defineStore('flameout', {
 
     settleRound() {
       if (!this.currentRound) return
+      this.jackpotSpinActive = false
 
       const round = this.currentRound
 
@@ -239,6 +244,20 @@ export const useFlameoutStore = defineStore('flameout', {
       this.bankroll.initialBalance = amount
       this.bankroll.peakBalance = amount
       this.phase = 'WAITING'
+    },
+
+    applyGauntletBonus(amountCents: number) {
+      this.bankroll.balance += amountCents
+      if (amountCents > 0) {
+        this.bankroll.totalReturned += amountCents
+      }
+      if (this.bankroll.balance > this.bankroll.peakBalance) {
+        this.bankroll.peakBalance = this.bankroll.balance
+      }
+      // Don't let balance go below 0
+      if (this.bankroll.balance < 0) {
+        this.bankroll.balance = 0
+      }
     },
 
     updateSettings(partial: Partial<GameSettings>) {

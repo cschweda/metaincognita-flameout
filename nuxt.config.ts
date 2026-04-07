@@ -8,6 +8,8 @@ export default defineNuxtConfig({
 
   ssr: false,
 
+  spaLoadingTemplate: true,
+
   devtools: {
     enabled: true
   },

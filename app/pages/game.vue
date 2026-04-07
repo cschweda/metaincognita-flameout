@@ -1,12 +1,30 @@
 <script setup lang="ts">
 import { formatCents, formatMultiplier } from '~/types/flameout'
+import type { GameMode } from '~/types/flameout'
 
+const route = useRoute()
 const router = useRouter()
 const store = useFlameoutStore()
 const engine = useFlameoutEngine()
 
-// Redirect to setup if no active game
+// Redirect to setup if no active game (unless demo mode)
 onMounted(() => {
+  const demo = route.query.demo as string | undefined
+  if (demo && !store.isPlaying) {
+    // Auto-start a demo session
+    const mode = (route.query.mode as GameMode) || 'classic'
+    store.initializeGame({
+      houseEdgePercent: 3,
+      startingBankroll: 1000,
+      speedFactor: 1,
+      gameMode: mode
+    })
+    store.pendingBet = 1000
+    engine.startBettingPhase()
+    engine.placeBetAndStart(1000)
+    return
+  }
+
   if (!store.isPlaying) {
     const loaded = store.loadFromLocalStorage()
     if (!loaded || !store.isPlaying) {

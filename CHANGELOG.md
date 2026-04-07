@@ -2,6 +2,42 @@
 
 All notable changes to Flameout will be documented in this file.
 
+## [0.3.0] - 2026-04-06
+
+### Added
+
+- **Game variant system**: selectable game modes on setup screen (Classic, Gauntlet, Jackpot)
+- **Gauntlet mode**: steer the jet vertically (arrow keys / W/S) to collect bonuses and dodge obstacles as the multiplier climbs
+  - 5 item types: Coin (+$1–5), Star (+$5–15), Diamond (+$10–25), Mine (-$3–10), Asteroid (-$5–15)
+  - Weighted spawn rates with increasing frequency and value over time
+  - Collision detection, screen shake on obstacle hits, floating +/- text popups
+  - Running bonus total displayed on canvas
+  - Jet stays level (Scramble/Zaxxon style) — only translates vertically, no tilting
+- **Jackpot mode**: collect golden slot triggers to spin a 3-reel slot machine mini-game
+  - 5 slot symbols: 7, Cherry, Diamond, Bar, Star
+  - Triple 7s = 25× base value, triple match = 10×, double match = 3×, no match = nothing
+  - Crash mechanics suspended during active spin — multiplier keeps climbing but won't crash until reels finish
+  - Animated reel-stop sequence (left → middle → right) with result glow
+  - Base values increase as the game progresses
+- **Animated canvas background**: dynamic gradient sky, 140-star parallax starfield, nebula wisps, horizon glow, vignette
+  - Sky color shifts from deep blue to purple/warm as multiplier climbs
+  - Stars drift during flight, twinkle, and gain glow halos at high multipliers
+  - Crash = red tint, cashout = green tint
+  - Screen shake on crash
+  - Curve glow effect (soft wider line behind main curve)
+- **SPA loading screen**: dark branded splash with jet icon, gold title, "Metaincognita Casino Simulator Suite" subtitle, feature tags, animated progress bar, twinkling starfield (matches pachinko project aesthetic)
+- **Demo mode**: `?demo=1&mode=classic|gauntlet|jackpot` URL parameter auto-starts a game session without localStorage, skipping How to Play modal
+
+### Changed
+
+- Variant modes position jet at 28% canvas width (left side) for item reaction time
+- Canvas render loop now runs continuously (background animates even during WAITING phase)
+- Grid lines glow intensity scales with multiplier
+
+### Fixed
+
+- Jet no longer tilts when steering vertically in variant modes (fixed horizontal angle)
+
 ## [0.2.0] - 2026-04-05
 
 ### Added

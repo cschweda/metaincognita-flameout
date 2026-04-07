@@ -40,6 +40,15 @@ The format was born in the cryptocurrency casino community in 2014 and has since
 - "How to Play" modal on first visit
 - New Game button to reset session
 
+### Game Variants
+Three selectable game modes on the setup screen:
+
+- **Classic** — The original crash game. Watch the multiplier rise and cash out before the crash. Pure math, pure tension.
+- **Gauntlet** — Steer the jet vertically (arrow keys / W/S) to collect bonuses (coins, stars, diamonds) and dodge obstacles (mines, asteroids) as the multiplier climbs. Bonuses and penalties apply directly to your bankroll. The jet flies level like Scramble/Zaxxon — no tilting, just vertical translation. Items spawn ahead and scroll from right to left with increasing frequency. The core crash mechanics and house edge are unchanged — the items are a side game layered on top that adds variance and engagement.
+- **Jackpot** — Collect golden slot triggers to spin a 3-reel slot machine. Triple 7s pay 25× the trigger value, triple match pays 10×, double match pays 3×. Crash mechanics are suspended during an active spin — the multiplier keeps climbing but won't crash until the reels finish. Base values increase as the game progresses.
+
+All variants share the same underlying crash point math, house edge, and EV. The variant mechanics add engagement and distraction — exactly the psychology real casino crash game variants exploit.
+
 ### Analytics & Education
 - **Probability Explorer**: Enter any multiplier target and see the exact probability, implied odds, break-even rate, and EV
 - **Session Statistics**: Running totals of rounds played, win/loss, total wagered, empirical RTP, streaks, peak balance, max drawdown
@@ -49,10 +58,13 @@ The format was born in the cryptocurrency casino community in 2014 and has since
 
 ### UI
 - Dark mode interface (Bloomberg terminal aesthetic)
-- Setup screen → Game screen with right-hand stats sidebar
+- Animated canvas background: parallax starfield, nebula wisps, dynamic gradient sky that shifts with multiplier, horizon glow, vignette, screen shake on crash
+- Branded SPA loading screen with animated progress bar (matches Metaincognita suite aesthetic)
+- Setup screen with game mode selector → Game screen with right-hand stats sidebar
 - Bottom navigation: History and Analysis pages with GitHub link
-- Keyboard controls (Space to bet/cashout)
+- Keyboard controls (Space to bet/cashout, arrow keys to steer in variant modes)
 - Accessible modals with screen reader support
+- Demo mode via URL parameter (`?demo=1&mode=classic`)
 - Responsive layout
 
 ---
@@ -111,10 +123,12 @@ app/
     flameout-math.ts           — Pure math: crash point gen, probability, EV
     flameout-rng.ts            — Seeded PRNG (mulberry32)
   components/flameout/
-    Canvas.vue                 — Multiplier curve rendering
+    Canvas.vue                 — Multiplier curve, background, variant rendering
     Controls.vue               — Bet input, cashout button, auto-cashout
     HistoryStrip.vue           — Color-coded crash point badges
+    HowToPlay.vue              — First-visit tutorial modal
     Stats.vue                  — Session/Probability sidebar
+  spa-loading-template.html    — Branded dark loading screen
   pages/
     index.vue                  — Setup screen
     game.vue                   — Main game

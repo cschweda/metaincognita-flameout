@@ -2,6 +2,10 @@
 const show = ref(false)
 
 onMounted(() => {
+  // Skip modal in demo mode
+  const params = new URLSearchParams(window.location.search)
+  if (params.has('demo')) return
+
   const seen = localStorage.getItem('flameout-how-to-play-seen')
   if (!seen) {
     show.value = true

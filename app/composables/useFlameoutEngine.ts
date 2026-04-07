@@ -70,18 +70,19 @@ export function useFlameoutEngine() {
 
     store.updateMultiplier(multiplier, elapsed)
 
-    // Check auto-cashout
+    // Check auto-cashout (suspended during jackpot spin)
     if (
       store.settings.autoCashoutTarget
       && !store.currentRound.cashedOut
       && multiplier >= store.settings.autoCashoutTarget
       && store.currentRound.betAmount > 0
+      && !store.jackpotSpinActive
     ) {
       cashOut()
     }
 
-    // Check crash
-    if (multiplier >= store.currentRound.crashPoint) {
+    // Check crash (suspended during jackpot spin)
+    if (multiplier >= store.currentRound.crashPoint && !store.jackpotSpinActive) {
       crash()
       return
     }

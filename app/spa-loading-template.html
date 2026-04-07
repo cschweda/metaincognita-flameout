@@ -1,0 +1,112 @@
+<div style="
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #0d1117 0%, #1a1a2e 100%);
+  z-index: 9999;
+  font-family: system-ui, -apple-system, sans-serif;
+  overflow: hidden;
+  color: #c9d1d9;
+">
+  <!-- Starfield background -->
+  <div id="splash-stars" style="position:absolute;inset:0;overflow:hidden;"></div>
+
+  <!-- Content -->
+  <div style="position:relative;z-index:1;text-align:center;max-width:500px;padding:2rem;">
+    <!-- Jet icon -->
+    <div style="margin-bottom:20px;">
+      <svg width="56" height="56" viewBox="0 0 64 64" fill="none" style="filter:drop-shadow(0 0 20px rgba(255,215,0,0.3))">
+        <path d="M56 32 L42 24 L20 20 L14 24 L14 40 L20 44 L42 40 Z" fill="#ffd700" opacity="0.9"/>
+        <path d="M38 24 L28 12 L22 14 L28 22 Z" fill="#ffd700" opacity="0.6"/>
+        <path d="M38 40 L28 52 L22 50 L28 42 Z" fill="#ffd700" opacity="0.6"/>
+        <ellipse cx="48" cy="30" rx="5" ry="3" fill="rgba(255,255,255,0.6)"/>
+        <path d="M14 32 L2 28 L-4 32 L2 36 Z" fill="#f97316" opacity="0.7">
+          <animate attributeName="opacity" values="0.4;0.8;0.4" dur="0.3s" repeatCount="indefinite"/>
+        </path>
+        <path d="M14 32 L-2 30 L-6 32 L-2 34 Z" fill="#fbbf24" opacity="0.6">
+          <animate attributeName="opacity" values="0.3;0.7;0.3" dur="0.2s" repeatCount="indefinite"/>
+        </path>
+      </svg>
+    </div>
+
+    <!-- Title -->
+    <h1 style="
+      font-size: 2.5rem;
+      font-weight: 700;
+      color: #ffd700;
+      text-shadow: 0 0 20px rgba(255, 215, 0, 0.3);
+      margin: 0 0 0.25rem 0;
+    ">Flameout</h1>
+    <p style="color: #8b949e; font-size: 0.9rem; margin: 0 0 1.5rem 0;">
+      Metaincognita Casino Simulator Suite
+    </p>
+
+    <!-- Description -->
+    <p style="color: #c9d1d9; font-size: 0.95rem; line-height: 1.6; margin: 0 0 0.5rem 0;">
+      A crash game simulator. No real money. Just math.
+    </p>
+    <p style="color: #8b949e; font-size: 0.85rem; font-style: italic; margin: 0 0 1.5rem 0;">
+      The multiplier climbs. The house always wins.
+    </p>
+
+    <!-- Feature tags -->
+    <div style="display:flex;flex-wrap:wrap;gap:0.5rem;justify-content:center;margin-bottom:2rem;">
+      <span style="background:#161b22;border:1px solid #30363d;border-radius:6px;padding:0.35rem 0.75rem;font-size:0.8rem;color:#8b949e;">Real-time probability</span>
+      <span style="background:#161b22;border:1px solid #30363d;border-radius:6px;padding:0.35rem 0.75rem;font-size:0.8rem;color:#8b949e;">Crash point RNG</span>
+      <span style="background:#161b22;border:1px solid #30363d;border-radius:6px;padding:0.35rem 0.75rem;font-size:0.8rem;color:#8b949e;">Statistical analysis</span>
+      <span style="background:#161b22;border:1px solid #30363d;border-radius:6px;padding:0.35rem 0.75rem;font-size:0.8rem;color:#8b949e;">Game variants</span>
+    </div>
+
+    <!-- Progress bar -->
+    <div style="
+      width: 200px;
+      height: 3px;
+      background: #21262d;
+      border-radius: 3px;
+      overflow: hidden;
+      margin: 0 auto 12px;
+    ">
+      <div style="
+        width: 40%;
+        height: 100%;
+        background: linear-gradient(90deg, #b8960b, #ffd700);
+        border-radius: 3px;
+        animation: splash-progress 1.5s ease-in-out infinite;
+      "></div>
+    </div>
+    <p style="color: #484f58; font-size: 0.7rem; margin: 0; letter-spacing: 1.5px; text-transform: uppercase;">
+      Loading
+    </p>
+  </div>
+</div>
+
+<style>
+  @keyframes splash-progress {
+    0% { width: 0%; margin-left: 0%; }
+    50% { width: 60%; margin-left: 20%; }
+    100% { width: 0%; margin-left: 100%; }
+  }
+</style>
+
+<script>
+  (function() {
+    var c = document.getElementById('splash-stars');
+    if (!c) return;
+    for (var i = 0; i < 60; i++) {
+      var d = document.createElement('div');
+      var s = 0.8 + Math.random() * 1.5;
+      d.style.cssText = 'position:absolute;border-radius:50%;background:#fff;opacity:' +
+        (0.08 + Math.random() * 0.25) + ';width:' + s + 'px;height:' + s + 'px;left:' +
+        (Math.random() * 100) + '%;top:' + (Math.random() * 100) +
+        '%;animation:splash-twinkle ' + (2 + Math.random() * 4) + 's ease-in-out infinite ' +
+        (Math.random() * 3) + 's';
+      c.appendChild(d);
+    }
+    var st = document.createElement('style');
+    st.textContent = '@keyframes splash-twinkle{0%,100%{opacity:0.05}50%{opacity:0.3}}';
+    document.head.appendChild(st);
+  })();
+</script>

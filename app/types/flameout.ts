@@ -2,7 +2,108 @@
 
 export type GamePhase = 'SETUP' | 'WAITING' | 'RUNNING' | 'CRASHED' | 'SETTLING' | 'BUSTED'
 
-// ── Money (all values in integer cents) ──────────────��──────────────────────
+export type GameMode = 'classic' | 'gauntlet' | 'jackpot'
+
+export interface GameModeInfo {
+  id: GameMode
+  name: string
+  tagline: string
+  description: string
+  icon: string
+}
+
+export const GAME_MODES: GameModeInfo[] = [
+  {
+    id: 'classic',
+    name: 'Classic',
+    tagline: 'The original crash game',
+    description: 'Watch the multiplier rise and cash out before the crash. Pure math, pure tension.',
+    icon: 'i-lucide-flame'
+  },
+  {
+    id: 'gauntlet',
+    name: 'Gauntlet',
+    tagline: 'Dodge, collect, survive',
+    description: 'Steer the jet with arrow keys to collect bonuses and dodge obstacles as the multiplier climbs.',
+    icon: 'i-lucide-swords'
+  },
+  {
+    id: 'jackpot',
+    name: 'Jackpot',
+    tagline: 'Hit the slots, win big',
+    description: 'Collect slot triggers to spin 3 reels. Triple match = massive payout. Dodge the duds.',
+    icon: 'i-lucide-diamond'
+  }
+]
+
+// ── Gauntlet Mode ──────────────────────────────────────────────────────────
+
+export type GauntletItemType = 'coin' | 'star' | 'diamond' | 'mine' | 'asteroid'
+
+export interface GauntletItem {
+  id: number
+  type: GauntletItemType
+  timeMs: number        // elapsed ms when item is at the jet's x position
+  yOffset: number       // pixel offset from the curve (-140 to +140)
+  value: number         // cents: positive = bonus, negative = obstacle
+  collected: boolean
+  missed: boolean       // scrolled past without collection
+  radius: number
+}
+
+export interface FloatingText {
+  x: number
+  y: number
+  text: string
+  color: string
+  life: number
+  maxLife: number
+}
+
+export const GAUNTLET_ITEM_DEFS: Record<GauntletItemType, { color: string; glow: string; minValue: number; maxValue: number; weight: number }> = {
+  coin:     { color: '#fbbf24', glow: '#f59e0b', minValue: 100,  maxValue: 500,   weight: 40 },
+  star:     { color: '#facc15', glow: '#eab308', minValue: 500,  maxValue: 1500,  weight: 20 },
+  diamond:  { color: '#67e8f9', glow: '#22d3ee', minValue: 1000, maxValue: 2500,  weight: 8 },
+  mine:     { color: '#ef4444', glow: '#dc2626', minValue: -300, maxValue: -1000, weight: 22 },
+  asteroid: { color: '#a1a1aa', glow: '#71717a', minValue: -500, maxValue: -1500, weight: 10 }
+}
+
+// ── Jackpot Mode ───────────────────────────────────────────────────────────
+
+export type SlotSymbol = '7' | 'cherry' | 'diamond' | 'bar' | 'star'
+
+export const SLOT_SYMBOLS: SlotSymbol[] = ['7', 'cherry', 'diamond', 'bar', 'star']
+
+export const SLOT_SYMBOL_COLORS: Record<SlotSymbol, string> = {
+  '7': '#ef4444',
+  cherry: '#f43f5e',
+  diamond: '#22d3ee',
+  bar: '#f59e0b',
+  star: '#facc15'
+}
+
+export interface JackpotTrigger {
+  id: number
+  timeMs: number
+  yOffset: number
+  baseValue: number   // cents — multiplied by match result
+  collected: boolean
+  missed: boolean
+  radius: number
+}
+
+export type SlotSpinPhase = 'idle' | 'spinning' | 'stop1' | 'stop2' | 'stop3' | 'result'
+
+export interface SlotSpinState {
+  phase: SlotSpinPhase
+  reels: [SlotSymbol, SlotSymbol, SlotSymbol]
+  startTime: number
+  payout: number       // cents
+  triggerX: number      // screen position for the overlay
+  triggerY: number
+}
+
+// ── Money (all values in integer cents) ──────────────────────────────────
 
 export interface BankrollState {
   balance: number
@@ -50,6 +151,7 @@ export interface GameSettings {
   speedFactor: number
   autoCashoutTarget: number | null // multiplier or null
   autoBet: boolean
+  gameMode: GameMode
 }
 
 export const DEFAULT_SETTINGS: GameSettings = {
@@ -60,7 +162,8 @@ export const DEFAULT_SETTINGS: GameSettings = {
   bettingWindowMs: 5000,
   speedFactor: 1,
   autoCashoutTarget: null,
-  autoBet: false
+  autoBet: false,
+  gameMode: 'classic'
 }
 
 // ── Current Round State ─────────────────────────────────────────────────────
@@ -132,6 +235,7 @@ export interface SetupConfig {
   houseEdgePercent: number
   startingBankroll: number // dollars (converted to cents in store)
   speedFactor: number
+  gameMode: GameMode
 }
 
 // ── Helpers ───────────���─────────────────────────��───────────────────────────
