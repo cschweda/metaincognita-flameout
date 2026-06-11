@@ -70,6 +70,18 @@ All variants share the same underlying crash point math and house edge. Side-gam
 
 ---
 
+## Local-Only by Design
+
+Everything runs in your browser. There is no backend, no serverless functions, no database, no accounts, and no analytics:
+
+- All game logic, math, and batch simulation run entirely client-side
+- Session state lives in `localStorage` and never leaves your machine
+- All assets — fonts and icons included — are bundled at build time
+- The production Content-Security-Policy (`connect-src 'self'`) makes external requests impossible at runtime
+- Netlify serves prebuilt static files only (`netlify_static` preset — no Netlify Functions)
+
+---
+
 ## Tech Stack
 
 | Layer | Technology |
@@ -81,7 +93,7 @@ All variants share the same underlying crash point math and house edge. Side-gam
 | Styling | Tailwind CSS v4 |
 | Package Manager | pnpm |
 | Testing | Vitest |
-| Deployment | Netlify (SPA) |
+| Deployment | Netlify (static files only) |
 
 ---
 
