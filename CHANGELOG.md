@@ -2,6 +2,45 @@
 
 All notable changes to Flameout will be documented in this file.
 
+## [0.4.0] - 2026-06-11
+
+### Added
+
+- **Strategy Lab UI** on the Analysis page: simulate Flat, Martingale, D'Alembert, Fibonacci, and Paroli over 1K–100K rounds, with a compare-all mode that runs every system against the identical seeded crash sequence and overlays the bankroll curves (SVG chart, results table, expected-loss summary)
+- **Learn page** (`/learn`): the full crash-game mathematics — inverse distribution with probability table, crash point generation and the instant-crash house edge mechanism, the EV-invariance proof, variance profiles, gambler's fallacy, betting systems, house edge comparison, provably fair cryptography explainer, and a history timeline — linked from the bottom nav and setup screen
+- **Side-game accounting**: variant results (gauntlet items, jackpot spins) are tracked in a new `sideGameNet` field, shown in the stats sidebar and Analysis page, and excluded from `totalReturned` so empirical RTP always reflects the crash game alone
+- **Session resume after navigation**: leaving the game page mid-round no longer freezes the round — on return, the engine resolves whatever happened in the meantime (crash or auto-cashout) from wall-clock timestamps, and the canvas backfills the curve
+- **Reduced-motion support**: `prefers-reduced-motion` stills the starfield/wisp drift, disables particles, screen shake, and pulsing buttons
+- **Screen reader announcements**: round results (cashed out / crashed / busted) are announced via an `aria-live` region; the canvas has an accessible label
+- Versioned localStorage persistence (v2) with sanitization and automatic migration of v1 sessions
+- Unit tests for the store (round ids, side-game accounting, persistence migration) and the variant economy (EV neutrality, reel distribution) — 63 tests total
+- CI now runs the test suite and a production build in addition to lint and typecheck
+- `pnpm dev:fresh` (`start-dev-server.sh`): kills anything on the dev port plus any stray dev server from this project, then starts a fresh one (`PORT=3001` to override the port)
+
+### Changed
+
+- **Gauntlet item economy rebalanced to exactly zero EV** (weights × midpoint values sum to 0, verified by unit test) — the side game adds variance and skill, not free money
+- **Jackpot spins are now staked**: collecting a trigger deducts its stake; reels pay 10×/5×/2× the stake for triple-7s/triples/doubles (EV = stake, variance only). Triggers you can't afford are skipped
+- **Jackpot spins freeze round time** instead of letting the multiplier climb past the crash point; manual cashout is locked while reels roll (previously a spin could carry the round beyond its predetermined crash point — strictly +EV)
+- Crash is now checked before auto-cashout within a frame: reaching the crash point and the target simultaneously is a loss (also removes a double-settle race)
+- Engine timing is derived from `startedAt` timestamps instead of an animation-loop accumulator; engine state is module-scoped so all components share one loop and `cleanup()` cancels every pending timer
+- Canvas performance: canvas buffer is sized once via `ResizeObserver` instead of every frame (per-frame `getBoundingClientRect` + buffer reallocation removed), hot-loop state uses plain arrays instead of reactive refs, long-round curves are decimated
+- Variant item spawn offsets and steering range now scale with canvas height — Gauntlet/Jackpot items no longer spawn off-screen on small displays
+- Arrow-key handling is scoped to variant modes during a running round (no more hijacked page scrolling in Classic)
+- Pure rendering extracted to `utils/canvas-draw.ts` and variant game logic to `utils/flameout-variants.ts` (Canvas.vue: 1,524 → ~700 lines)
+- `formatCents` renders negative amounts as `-$3.00` instead of `$-3.00`
+- Content-Security-Policy: removed `unsafe-eval` from `script-src`
+
+### Fixed
+
+- **Risk-free cashout exploit**: navigating away mid-round froze the multiplier while keeping cashout armed, guaranteeing a win on return
+- **Background auto-bet**: orphaned settle timers could keep playing rounds (and burning bankroll) after leaving the game page with auto-bet enabled; "Leave & Save" now also cancels in-flight round timers
+- Spacebar no longer places bets / cashes out while typing in the bet or auto-cashout inputs
+- Round ids no longer collide after the 1000-round history trim (monotonic counter, persisted) — fixes duplicate row keys in the History table
+- Crash explosion burst now uses the same vertical scale as the curve (it could render at the wrong height when an auto-cashout target was set)
+- Corrupt or partially missing localStorage payloads no longer poison the session (NaN balances); fields are validated and defaulted on load
+- Canvas resize listener and reduced-motion media listener are removed on unmount (previously leaked)
+
 ## [0.3.0] - 2026-04-06
 
 ### Added

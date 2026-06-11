@@ -29,7 +29,10 @@ function formatPercent(n: number): string {
         </p>
       </div>
 
-      <div v-if="store.bankroll.roundsPlayed === 0" class="text-center py-16">
+      <div
+        v-if="store.bankroll.roundsPlayed === 0"
+        class="text-center py-16"
+      >
         <p class="text-neutral-600">
           No rounds played yet. Start a game to see analysis.
         </p>
@@ -58,7 +61,10 @@ function formatPercent(n: number): string {
             <div class="text-xs text-neutral-500 uppercase tracking-wider">
               Empirical RTP
             </div>
-            <div class="text-xl font-bold mt-1 font-mono" :class="stats.empiricalRTP >= 1 ? 'text-emerald-400' : 'text-red-400'">
+            <div
+              class="text-xl font-bold mt-1 font-mono"
+              :class="stats.empiricalRTP >= 1 ? 'text-emerald-400' : 'text-red-400'"
+            >
               {{ formatPercent(stats.empiricalRTP) }}
             </div>
           </div>
@@ -105,11 +111,35 @@ function formatPercent(n: number): string {
               </div>
               <div class="flex justify-between">
                 <span class="text-neutral-500">Actual RTP</span>
-                <span class="font-mono" :class="stats.empiricalRTP >= 1 ? 'text-emerald-400' : 'text-amber-400'">
+                <span
+                  class="font-mono"
+                  :class="stats.empiricalRTP >= 1 ? 'text-emerald-400' : 'text-amber-400'"
+                >
                   {{ formatPercent(stats.empiricalRTP) }}
                 </span>
               </div>
+              <div
+                v-if="store.settings.gameMode !== 'classic' || store.bankroll.sideGameNet !== 0"
+                class="flex justify-between border-t border-neutral-800 pt-2"
+              >
+                <span class="text-neutral-500">Side-Game Net</span>
+                <span
+                  class="font-mono"
+                  :class="store.bankroll.sideGameNet >= 0 ? 'text-emerald-400' : 'text-red-400'"
+                >
+                  {{ store.bankroll.sideGameNet >= 0 ? '+' : '' }}{{ formatCents(store.bankroll.sideGameNet) }}
+                </span>
+              </div>
             </div>
+            <p
+              v-if="store.settings.gameMode !== 'classic'"
+              class="text-[10px] text-neutral-600 leading-relaxed"
+            >
+              The variant side game (items / spins) is balanced to zero expected value and
+              tracked separately, so it never contaminates the crash-game RTP above. Real
+              casino bonus features are never this generous — their "extras" are priced
+              into the house edge.
+            </p>
           </div>
 
           <!-- Streaks -->
@@ -205,6 +235,9 @@ function formatPercent(n: number): string {
           </div>
         </div>
       </template>
+
+      <!-- Strategy Lab — independent of the live session -->
+      <FlameoutStrategyLab />
     </div>
   </div>
 </template>

@@ -31,7 +31,7 @@ export const GAME_MODES: GameModeInfo[] = [
     id: 'jackpot',
     name: 'Jackpot',
     tagline: 'Hit the slots, win big',
-    description: 'Collect slot triggers to spin 3 reels. Triple match = massive payout. Dodge the duds.',
+    description: 'Grab golden triggers to stake a 3-reel spin. Triples pay big. Time freezes while the reels roll.',
     icon: 'i-lucide-diamond'
   }
 ]
@@ -43,11 +43,11 @@ export type GauntletItemType = 'coin' | 'star' | 'diamond' | 'mine' | 'asteroid'
 export interface GauntletItem {
   id: number
   type: GauntletItemType
-  timeMs: number        // elapsed ms when item is at the jet's x position
-  yOffset: number       // pixel offset from the curve (-140 to +140)
-  value: number         // cents: positive = bonus, negative = obstacle
+  timeMs: number // elapsed ms when item is at the jet's x position
+  yOffsetFrac: number // offset from the curve as a fraction of canvas height (-0.38 to +0.38)
+  value: number // cents: positive = bonus, negative = obstacle
   collected: boolean
-  missed: boolean       // scrolled past without collection
+  missed: boolean // scrolled past without collection
   radius: number
 }
 
@@ -60,12 +60,17 @@ export interface FloatingText {
   maxLife: number
 }
 
-export const GAUNTLET_ITEM_DEFS: Record<GauntletItemType, { color: string; glow: string; minValue: number; maxValue: number; weight: number }> = {
-  coin:     { color: '#fbbf24', glow: '#f59e0b', minValue: 100,  maxValue: 500,   weight: 40 },
-  star:     { color: '#facc15', glow: '#eab308', minValue: 500,  maxValue: 1500,  weight: 20 },
-  diamond:  { color: '#67e8f9', glow: '#22d3ee', minValue: 1000, maxValue: 2500,  weight: 8 },
-  mine:     { color: '#ef4444', glow: '#dc2626', minValue: -300, maxValue: -1000, weight: 22 },
-  asteroid: { color: '#a1a1aa', glow: '#71717a', minValue: -500, maxValue: -1500, weight: 10 }
+/**
+ * Item mix is balanced so the EV of a spawned item is exactly $0.00
+ * (sum of weight × midpoint value = 0). The side game adds variance and a
+ * skill element, not a money faucet — see gauntletSpawnEV() and its test.
+ */
+export const GAUNTLET_ITEM_DEFS: Record<GauntletItemType, { color: string, glow: string, minValue: number, maxValue: number, weight: number }> = {
+  coin: { color: '#fbbf24', glow: '#f59e0b', minValue: 100, maxValue: 500, weight: 40 },
+  star: { color: '#facc15', glow: '#eab308', minValue: 600, maxValue: 1200, weight: 15 },
+  diamond: { color: '#67e8f9', glow: '#22d3ee', minValue: 1000, maxValue: 2000, weight: 5 },
+  mine: { color: '#ef4444', glow: '#dc2626', minValue: -500, maxValue: -1000, weight: 28 },
+  asteroid: { color: '#a1a1aa', glow: '#71717a', minValue: -700, maxValue: -1300, weight: 12 }
 }
 
 // ── Jackpot Mode ───────────────────────────────────────────────────────────
@@ -75,7 +80,7 @@ export type SlotSymbol = '7' | 'cherry' | 'diamond' | 'bar' | 'star'
 export const SLOT_SYMBOLS: SlotSymbol[] = ['7', 'cherry', 'diamond', 'bar', 'star']
 
 export const SLOT_SYMBOL_COLORS: Record<SlotSymbol, string> = {
-  '7': '#ef4444',
+  7: '#ef4444',
   cherry: '#f43f5e',
   diamond: '#22d3ee',
   bar: '#f59e0b',
@@ -85,8 +90,8 @@ export const SLOT_SYMBOL_COLORS: Record<SlotSymbol, string> = {
 export interface JackpotTrigger {
   id: number
   timeMs: number
-  yOffset: number
-  baseValue: number   // cents — multiplied by match result
+  yOffsetFrac: number // offset from the curve as a fraction of canvas height
+  stake: number // cents — deducted on collection, multiplied by match result
   collected: boolean
   missed: boolean
   radius: number
@@ -98,10 +103,22 @@ export interface SlotSpinState {
   phase: SlotSpinPhase
   reels: [SlotSymbol, SlotSymbol, SlotSymbol]
   startTime: number
-  payout: number       // cents
-  triggerX: number      // screen position for the overlay
+  stake: number // cents paid to start the spin
+  payout: number // cents (gross — stake already deducted at collection)
+  triggerX: number // screen position for the overlay
   triggerY: number
 }
+
+/**
+ * Slot payout schedule, as multiples of the stake.
+ * EV = 0.02×10 + 0.08×5 + 0.20×2 = 1.0× the stake — the spin returns its
+ * cost in expectation. Variance only, no faucet. See slotSpinEV() test.
+ */
+export const SLOT_OUTCOMES = {
+  tripleSeven: { probability: 0.02, payoutMultiple: 10 },
+  triple: { probability: 0.08, payoutMultiple: 5 },
+  double: { probability: 0.20, payoutMultiple: 2 }
+} as const
 
 // ── Money (all values in integer cents) ──────────────────────────────────
 
@@ -111,6 +128,9 @@ export interface BankrollState {
   peakBalance: number
   totalWagered: number
   totalReturned: number
+  // Net result of variant side games (gauntlet items, jackpot spins).
+  // Tracked separately so it never contaminates the crash-game RTP stats.
+  sideGameNet: number
   roundsPlayed: number
   roundsWon: number
   roundsLost: number
@@ -132,22 +152,13 @@ export interface RoundRecord {
   timestamp: number
 }
 
-export interface CashOutResult {
-  success: boolean
-  multiplier: number
-  betAmount: number // cents
-  payout: number // cents
-  profit: number // cents
-}
-
-// ── Game Settings ───────────��───────────────────────────────────────────────
+// ── Game Settings ────────────────────────────────────────────────────────────
 
 export interface GameSettings {
   houseEdgePercent: number // 0.5 – 10
   startingBankroll: number // cents
   minBet: number // cents
   maxBet: number // cents
-  bettingWindowMs: number
   speedFactor: number
   autoCashoutTarget: number | null // multiplier or null
   autoBet: boolean
@@ -159,7 +170,6 @@ export const DEFAULT_SETTINGS: GameSettings = {
   startingBankroll: 100_000, // $1,000.00
   minBet: 10, // $0.10
   maxBet: 100_000, // $1,000.00
-  bettingWindowMs: 5000,
   speedFactor: 1,
   autoCashoutTarget: null,
   autoBet: false,
@@ -222,13 +232,6 @@ export interface DistributionBin {
   expected: number // theoretical count for comparison
 }
 
-export interface StreakStats {
-  currentStreak: number
-  longestWinStreak: number
-  longestLossStreak: number
-  streakDistribution: Map<number, number> // streak length → frequency
-}
-
 // ── Setup Config (passed from setup screen) ────��────────────────────���───────
 
 export interface SetupConfig {
@@ -249,7 +252,8 @@ export function dollarsToCents(dollars: number): number {
 }
 
 export function formatCents(cents: number): string {
-  return `$${(cents / 100).toFixed(2)}`
+  const sign = cents < 0 ? '-' : ''
+  return `${sign}$${(Math.abs(cents) / 100).toFixed(2)}`
 }
 
 export function formatMultiplier(m: number): string {

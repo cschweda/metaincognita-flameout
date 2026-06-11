@@ -11,37 +11,59 @@ import { DEFAULT_SETTINGS, dollarsToCents } from '~/types/flameout'
 
 const STORAGE_KEY = 'flameout-session'
 
+// Bump when the persisted shape changes; loadFromLocalStorage migrates.
+const STORAGE_VERSION = 2
+
+function emptyBankroll(balanceCents = 0): BankrollState {
+  return {
+    balance: balanceCents,
+    initialBalance: balanceCents,
+    peakBalance: balanceCents,
+    totalWagered: 0,
+    totalReturned: 0,
+    sideGameNet: 0,
+    roundsPlayed: 0,
+    roundsWon: 0,
+    roundsLost: 0,
+    currentStreak: 0,
+    longestWinStreak: 0,
+    longestLossStreak: 0
+  }
+}
+
+function asFiniteNumber(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback
+}
+
+/** Coerce a persisted bankroll into a valid shape — bad fields fall back to 0. */
+function sanitizeBankroll(raw: unknown): BankrollState {
+  const source = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
+  const clean = emptyBankroll()
+  for (const key of Object.keys(clean) as (keyof BankrollState)[]) {
+    clean[key] = asFiniteNumber(source[key], clean[key])
+  }
+  return clean
+}
+
 export const useFlameoutStore = defineStore('flameout', {
   state: () => ({
     phase: 'SETUP' as GamePhase,
 
     settings: { ...DEFAULT_SETTINGS } as GameSettings,
 
-    bankroll: {
-      balance: 0,
-      initialBalance: 0,
-      peakBalance: 0,
-      totalWagered: 0,
-      totalReturned: 0,
-      roundsPlayed: 0,
-      roundsWon: 0,
-      roundsLost: 0,
-      currentStreak: 0,
-      longestWinStreak: 0,
-      longestLossStreak: 0
-    } as BankrollState,
+    bankroll: emptyBankroll(),
 
     currentRound: null as CurrentRound | null,
 
     roundHistory: [] as RoundRecord[],
 
+    // Monotonic round id — survives history trimming so ids never collide
+    nextRoundId: 1,
+
     // Current bet input (cents)
     pendingBet: 1000, // $10.00 default
 
-    // UI state
-    selectedChipValue: 1000,
-
-    // Jackpot mode: suspend crash while spinning
+    // Jackpot mode: freeze round time while the reels spin
     jackpotSpinActive: false
   }),
 
@@ -61,6 +83,7 @@ export const useFlameoutStore = defineStore('flameout', {
         && state.currentRound !== null
         && state.currentRound.betAmount > 0
         && !state.currentRound.cashedOut
+        && !state.jackpotSpinActive
     },
 
     winRate: (state): number => {
@@ -83,14 +106,6 @@ export const useFlameoutStore = defineStore('flameout', {
 
     lastCrashPoints: (state): number[] => {
       return state.roundHistory.slice(-30).map(r => r.crashPoint).reverse()
-    },
-
-    chipDenominations: (state): number[] => {
-      const min = state.settings.minBet
-      if (min >= 10000) return [10000, 25000, 50000, 100000]
-      if (min >= 1000) return [1000, 5000, 10000, 50000]
-      if (min >= 100) return [100, 500, 1000, 5000]
-      return [10, 50, 100, 500]
     }
   },
 
@@ -106,23 +121,12 @@ export const useFlameoutStore = defineStore('flameout', {
         gameMode: config.gameMode || 'classic'
       }
 
-      this.bankroll = {
-        balance: bankrollCents,
-        initialBalance: bankrollCents,
-        peakBalance: bankrollCents,
-        totalWagered: 0,
-        totalReturned: 0,
-        roundsPlayed: 0,
-        roundsWon: 0,
-        roundsLost: 0,
-        currentStreak: 0,
-        longestWinStreak: 0,
-        longestLossStreak: 0
-      }
-
+      this.bankroll = emptyBankroll(bankrollCents)
       this.currentRound = null
       this.roundHistory = []
+      this.nextRoundId = 1
       this.pendingBet = Math.min(1000, bankrollCents)
+      this.jackpotSpinActive = false
       this.phase = 'WAITING'
     },
 
@@ -140,6 +144,21 @@ export const useFlameoutStore = defineStore('flameout', {
         cashedOut: false,
         cashoutMultiplier: null
       }
+    },
+
+    // Stamp the moment the multiplier starts climbing. Elapsed time is always
+    // derived from this timestamp, so a round keeps flowing (and can be
+    // resolved) even if the page unmounts mid-flight.
+    beginRun() {
+      if (!this.currentRound) return
+      this.currentRound.startedAt = Date.now()
+      this.currentRound.elapsedMs = 0
+    },
+
+    // Push the start timestamp forward to freeze round time (jackpot spins).
+    shiftRoundStart(ms: number) {
+      if (!this.currentRound) return
+      this.currentRound.startedAt += ms
     },
 
     placeBet(amount: number) {
@@ -194,7 +213,7 @@ export const useFlameoutStore = defineStore('flameout', {
       const profit = payout - round.betAmount
 
       const record: RoundRecord = {
-        id: this.roundHistory.length + 1,
+        id: this.nextRoundId++,
         crashPoint: round.crashPoint,
         bet: round.betAmount,
         cashoutMultiplier: round.cashoutMultiplier,
@@ -206,22 +225,19 @@ export const useFlameoutStore = defineStore('flameout', {
 
       this.roundHistory.push(record)
 
-      // Only count rounds where a bet was placed
-      if (round.betAmount > 0) {
-        this.bankroll.roundsPlayed++
+      this.bankroll.roundsPlayed++
 
-        if (won) {
-          this.bankroll.roundsWon++
-          this.bankroll.currentStreak = Math.max(1, this.bankroll.currentStreak + 1)
-          if (this.bankroll.currentStreak > this.bankroll.longestWinStreak) {
-            this.bankroll.longestWinStreak = this.bankroll.currentStreak
-          }
-        } else {
-          this.bankroll.roundsLost++
-          this.bankroll.currentStreak = Math.min(-1, this.bankroll.currentStreak - 1)
-          if (Math.abs(this.bankroll.currentStreak) > this.bankroll.longestLossStreak) {
-            this.bankroll.longestLossStreak = Math.abs(this.bankroll.currentStreak)
-          }
+      if (won) {
+        this.bankroll.roundsWon++
+        this.bankroll.currentStreak = Math.max(1, this.bankroll.currentStreak + 1)
+        if (this.bankroll.currentStreak > this.bankroll.longestWinStreak) {
+          this.bankroll.longestWinStreak = this.bankroll.currentStreak
+        }
+      } else {
+        this.bankroll.roundsLost++
+        this.bankroll.currentStreak = Math.min(-1, this.bankroll.currentStreak - 1)
+        if (Math.abs(this.bankroll.currentStreak) > this.bankroll.longestLossStreak) {
+          this.bankroll.longestLossStreak = Math.abs(this.bankroll.currentStreak)
         }
       }
 
@@ -246,17 +262,19 @@ export const useFlameoutStore = defineStore('flameout', {
       this.phase = 'WAITING'
     },
 
-    applyGauntletBonus(amountCents: number) {
-      this.bankroll.balance += amountCents
-      if (amountCents > 0) {
-        this.bankroll.totalReturned += amountCents
-      }
+    /**
+     * Apply a side-game result (gauntlet item, jackpot spin) to the balance.
+     * Deliberately NOT counted as totalReturned — side games are tracked in
+     * sideGameNet so the crash-game RTP stats stay honest.
+     */
+    applySideGameDelta(amountCents: number) {
+      const applied = amountCents < 0
+        ? -Math.min(-amountCents, this.bankroll.balance)
+        : amountCents
+      this.bankroll.balance += applied
+      this.bankroll.sideGameNet += applied
       if (this.bankroll.balance > this.bankroll.peakBalance) {
         this.bankroll.peakBalance = this.bankroll.balance
-      }
-      // Don't let balance go below 0
-      if (this.bankroll.balance < 0) {
-        this.bankroll.balance = 0
       }
     },
 
@@ -267,9 +285,11 @@ export const useFlameoutStore = defineStore('flameout', {
     saveToLocalStorage() {
       try {
         const data = {
+          version: STORAGE_VERSION,
           settings: this.settings,
           bankroll: this.bankroll,
           roundHistory: this.roundHistory,
+          nextRoundId: this.nextRoundId,
           pendingBet: this.pendingBet,
           phase: this.phase === 'RUNNING' || this.phase === 'CRASHED' || this.phase === 'SETTLING'
             ? 'WAITING'
@@ -287,12 +307,23 @@ export const useFlameoutStore = defineStore('flameout', {
         if (!raw) return false
 
         const data = JSON.parse(raw)
+        if (!data || typeof data !== 'object') return false
+
         this.settings = { ...DEFAULT_SETTINGS, ...data.settings }
-        this.bankroll = data.bankroll
-        this.roundHistory = data.roundHistory || []
-        this.pendingBet = data.pendingBet || 1000
+        this.bankroll = sanitizeBankroll(data.bankroll)
+        this.roundHistory = Array.isArray(data.roundHistory)
+          ? data.roundHistory.filter((r: unknown) =>
+              r && typeof r === 'object' && Number.isFinite((r as RoundRecord).crashPoint))
+          : []
+
+        // v1 payloads predate nextRoundId — derive it from history
+        const maxHistoryId = this.roundHistory.reduce((max, r) => Math.max(max, r.id), 0)
+        this.nextRoundId = asFiniteNumber(data.nextRoundId, maxHistoryId + 1)
+
+        this.pendingBet = asFiniteNumber(data.pendingBet, 1000)
         this.phase = data.phase || 'WAITING'
         this.currentRound = null
+        this.jackpotSpinActive = false
         return true
       } catch {
         return false

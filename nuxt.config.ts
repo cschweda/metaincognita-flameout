@@ -8,28 +8,29 @@ export default defineNuxtConfig({
 
   ssr: false,
 
-  spaLoadingTemplate: true,
-
-  nitro: {
-    preset: 'netlify_static'
-  },
-
   devtools: {
     enabled: true
   },
+
+  css: ['~/assets/css/main.css'],
 
   colorMode: {
     preference: 'dark',
     fallback: 'dark'
   },
 
-  css: ['~/assets/css/main.css'],
+  spaLoadingTemplate: true,
 
   routeRules: {
-    '/': { prerender: true }
+    '/': { prerender: true },
+    '/learn': { prerender: true }
   },
 
   compatibilityDate: '2025-01-15',
+
+  nitro: {
+    preset: 'netlify_static'
+  },
 
   eslint: {
     config: {

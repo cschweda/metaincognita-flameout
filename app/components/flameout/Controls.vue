@@ -56,17 +56,35 @@ function toggleAutoBet() {
         class="w-full max-w-md py-4 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-bold text-lg tracking-wide transition-all duration-150 shadow-lg shadow-emerald-900/30 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
         @click="handleAction"
       >
-        <UIcon name="i-lucide-rocket" class="w-5 h-5" />
+        <UIcon
+          name="i-lucide-rocket"
+          class="w-5 h-5"
+        />
         Place Bet ({{ formatCents(store.pendingBet) }})
       </button>
+
+      <!-- RUNNING during a jackpot spin: round time is frozen, cashout locked -->
+      <div
+        v-else-if="store.phase === 'RUNNING' && store.jackpotSpinActive"
+        class="w-full max-w-md py-4 rounded-xl bg-amber-500/10 border-2 border-amber-500/40 text-amber-400 font-bold text-lg text-center flex items-center justify-center gap-2"
+      >
+        <UIcon
+          name="i-lucide-loader-circle"
+          class="w-5 h-5 motion-safe:animate-spin"
+        />
+        Reels spinning — multiplier frozen
+      </div>
 
       <!-- RUNNING: Cash Out — pulsing, urgent, unmissable -->
       <button
         v-else-if="store.phase === 'RUNNING' && store.canCashOut"
-        class="w-full max-w-md py-5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white font-black text-2xl tracking-wide transition-all duration-100 shadow-xl shadow-amber-900/40 active:scale-[0.97] animate-pulse flex items-center justify-center gap-3 ring-2 ring-amber-400/50 ring-offset-2 ring-offset-neutral-950"
+        class="w-full max-w-md py-5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white font-black text-2xl tracking-wide transition-all duration-100 shadow-xl shadow-amber-900/40 active:scale-[0.97] motion-safe:animate-pulse flex items-center justify-center gap-3 ring-2 ring-amber-400/50 ring-offset-2 ring-offset-neutral-950"
         @click="handleAction"
       >
-        <UIcon name="i-lucide-hand" class="w-7 h-7" />
+        <UIcon
+          name="i-lucide-hand"
+          class="w-7 h-7"
+        />
         CASH OUT {{ formatMultiplier(store.currentRound?.currentMultiplier || 1) }}
       </button>
 
@@ -107,7 +125,7 @@ function toggleAutoBet() {
             type="number"
             :min="store.settings.minBet / 100"
             :max="Math.min(store.settings.maxBet, store.bankroll.balance) / 100"
-            step="1"
+            step="any"
             :disabled="store.phase !== 'WAITING'"
             class="w-20 bg-neutral-800 border border-neutral-700 rounded px-2 py-1 text-sm text-neutral-200 font-mono text-right focus:border-amber-500 focus:outline-none disabled:opacity-50"
           >
@@ -146,7 +164,7 @@ function toggleAutoBet() {
             type="number"
             :min="1.01"
             :max="10000"
-            step="0.1"
+            step="any"
             placeholder="off"
             class="w-16 bg-neutral-800 border border-neutral-700 rounded px-2 py-1 text-sm text-neutral-200 font-mono text-right focus:border-amber-500 focus:outline-none"
           >
@@ -163,7 +181,10 @@ function toggleAutoBet() {
             : 'bg-neutral-800 border-neutral-700 text-neutral-500 hover:text-neutral-300'"
           @click="toggleAutoBet"
         >
-          <UIcon name="i-lucide-repeat" class="w-3 h-3" />
+          <UIcon
+            name="i-lucide-repeat"
+            class="w-3 h-3"
+          />
           Auto-bet
         </button>
 

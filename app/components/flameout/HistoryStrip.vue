@@ -68,7 +68,10 @@ function tooltipText(round: RoundRecord): string {
           {{ formatMultiplier(round.crashPoint) }}
         </span>
       </UTooltip>
-      <span v-if="recentCrashes.length === 0" class="text-[10px] text-neutral-700 italic">
+      <span
+        v-if="recentCrashes.length === 0"
+        class="text-[10px] text-neutral-700 italic"
+      >
         No rounds yet — place a bet to start
       </span>
     </div>

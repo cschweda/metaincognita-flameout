@@ -2,10 +2,11 @@
 const route = useRoute()
 const router = useRouter()
 const store = useFlameoutStore()
+const engine = useFlameoutEngine()
 
 const isSetup = computed(() => route.path === '/')
 const isGame = computed(() => route.path === '/game')
-const isSubPage = computed(() => route.path === '/history' || route.path === '/analysis')
+const isSubPage = computed(() => ['/history', '/analysis', '/learn'].includes(route.path))
 
 const showLeaveConfirm = ref(false)
 
@@ -19,6 +20,8 @@ function handleBack() {
 
 function confirmLeave() {
   showLeaveConfirm.value = false
+  // Cancel any in-flight round timers before parking the session
+  engine.cleanup()
   store.saveToLocalStorage()
   store.setPhase('SETUP')
   router.push('/')
@@ -42,15 +45,24 @@ function navigateTo(path: string) {
           class="flex items-center gap-1 text-xs text-neutral-400 hover:text-neutral-200 transition-colors"
           @click="handleBack"
         >
-          <UIcon name="i-lucide-arrow-left" class="w-3.5 h-3.5" />
+          <UIcon
+            name="i-lucide-arrow-left"
+            class="w-3.5 h-3.5"
+          />
           <span>Back</span>
         </button>
-        <span v-else class="text-xs text-neutral-600">
+        <span
+          v-else
+          class="text-xs text-neutral-600"
+        >
           <span class="text-amber-500/60">Flameout</span> Simulator
         </span>
       </div>
-      <div v-if="store.isPlaying && !isSetup" class="flex items-center gap-1">
-        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+      <div
+        v-if="store.isPlaying && !isSetup"
+        class="flex items-center gap-1"
+      >
+        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 motion-safe:animate-pulse" />
         <span class="text-[10px] text-neutral-500">Session active</span>
       </div>
     </nav>
@@ -68,7 +80,10 @@ function navigateTo(path: string) {
           :class="route.path === '/history' ? 'text-amber-400' : 'text-neutral-500 hover:text-neutral-300'"
           @click="navigateTo('/history')"
         >
-          <UIcon name="i-lucide-scroll-text" class="w-3.5 h-3.5" />
+          <UIcon
+            name="i-lucide-scroll-text"
+            class="w-3.5 h-3.5"
+          />
           <span>History</span>
         </button>
         <button
@@ -76,8 +91,22 @@ function navigateTo(path: string) {
           :class="route.path === '/analysis' ? 'text-amber-400' : 'text-neutral-500 hover:text-neutral-300'"
           @click="navigateTo('/analysis')"
         >
-          <UIcon name="i-lucide-chart-no-axes-combined" class="w-3.5 h-3.5" />
+          <UIcon
+            name="i-lucide-chart-no-axes-combined"
+            class="w-3.5 h-3.5"
+          />
           <span>Analysis</span>
+        </button>
+        <button
+          class="flex items-center gap-1.5 text-xs transition-colors"
+          :class="route.path === '/learn' ? 'text-amber-400' : 'text-neutral-500 hover:text-neutral-300'"
+          @click="navigateTo('/learn')"
+        >
+          <UIcon
+            name="i-lucide-book-open"
+            class="w-3.5 h-3.5"
+          />
+          <span>Learn</span>
         </button>
       </div>
       <a
@@ -85,7 +114,10 @@ function navigateTo(path: string) {
         target="_blank"
         class="flex items-center gap-1.5 text-xs text-neutral-500 hover:text-neutral-300 transition-colors"
       >
-        <UIcon name="i-simple-icons-github" class="w-3.5 h-3.5" />
+        <UIcon
+          name="i-simple-icons-github"
+          class="w-3.5 h-3.5"
+        />
         <span>GitHub</span>
       </a>
     </nav>
@@ -105,7 +137,7 @@ function navigateTo(path: string) {
             @click="showLeaveConfirm = false"
           />
           <UButton
-            color="amber"
+            color="primary"
             label="Leave & Save"
             @click="confirmLeave"
           />

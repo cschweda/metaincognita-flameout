@@ -140,6 +140,18 @@ const probResult = computed(() => {
             <span>Returned</span>
             <span class="font-mono text-neutral-300">{{ formatCents(stats.totalReturned) }}</span>
           </div>
+          <div
+            v-if="store.settings.gameMode !== 'classic' || store.bankroll.sideGameNet !== 0"
+            class="flex justify-between text-neutral-400"
+          >
+            <span>Side Game <span class="text-neutral-600">(not in RTP)</span></span>
+            <span
+              class="font-mono"
+              :class="store.bankroll.sideGameNet >= 0 ? 'text-emerald-400' : 'text-red-400'"
+            >
+              {{ store.bankroll.sideGameNet >= 0 ? '+' : '' }}{{ formatCents(store.bankroll.sideGameNet) }}
+            </span>
+          </div>
         </div>
 
         <!-- Crash stats -->

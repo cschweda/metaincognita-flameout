@@ -77,8 +77,15 @@ function resumeGame() {
             @click="gameMode = mode.id"
           >
             <div class="flex items-center gap-2 mb-1">
-              <UIcon :name="mode.icon" class="w-4 h-4" :class="gameMode === mode.id ? 'text-amber-400' : 'text-neutral-500'" />
-              <span class="font-bold text-sm" :class="gameMode === mode.id ? 'text-amber-400' : 'text-neutral-300'">{{ mode.name }}</span>
+              <UIcon
+                :name="mode.icon"
+                class="w-4 h-4"
+                :class="gameMode === mode.id ? 'text-amber-400' : 'text-neutral-500'"
+              />
+              <span
+                class="font-bold text-sm"
+                :class="gameMode === mode.id ? 'text-amber-400' : 'text-neutral-300'"
+              >{{ mode.name }}</span>
             </div>
             <p class="text-[10px] text-neutral-500 leading-tight">
               {{ mode.description }}
@@ -104,7 +111,11 @@ function resumeGame() {
             {{ store.bankroll.roundsPlayed }} rounds played
           </p>
         </div>
-        <UButton color="amber" label="Resume" @click="resumeGame" />
+        <UButton
+          color="primary"
+          label="Resume"
+          @click="resumeGame"
+        />
       </div>
 
       <!-- Setup card -->
@@ -204,15 +215,30 @@ function resumeGame() {
           class="w-full py-5 rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white font-bold text-xl tracking-wide transition-all duration-200 shadow-lg shadow-amber-900/30 hover:shadow-amber-800/40 active:scale-[0.98] flex items-center justify-center gap-3"
           @click="startGame"
         >
-          <UIcon name="i-lucide-flame" class="w-6 h-6" />
+          <UIcon
+            name="i-lucide-flame"
+            class="w-6 h-6"
+          />
           Start Game
         </button>
       </div>
 
       <!-- Footer -->
-      <p class="text-center text-neutral-600 text-xs">
-        All amounts are for simulation purposes only. No real money is wagered.
-      </p>
+      <div class="text-center space-y-2">
+        <NuxtLink
+          to="/learn"
+          class="inline-flex items-center gap-1.5 text-xs text-neutral-500 hover:text-amber-400 transition-colors"
+        >
+          <UIcon
+            name="i-lucide-book-open"
+            class="w-3.5 h-3.5"
+          />
+          Learn the math behind crash games →
+        </NuxtLink>
+        <p class="text-neutral-600 text-xs">
+          All amounts are for simulation purposes only. No real money is wagered.
+        </p>
+      </div>
     </div>
   </div>
 </template>

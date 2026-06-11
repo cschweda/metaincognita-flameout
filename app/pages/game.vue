@@ -7,8 +7,25 @@ const router = useRouter()
 const store = useFlameoutStore()
 const engine = useFlameoutEngine()
 
-// Redirect to setup if no active game (unless demo mode)
+// Keyboard: space to bet/cashout — but never while typing in a field
+function handleKeydown(e: KeyboardEvent) {
+  const target = e.target as HTMLElement | null
+  if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable)) {
+    return
+  }
+  if (e.code === 'Space') {
+    e.preventDefault()
+    if (store.phase === 'WAITING') {
+      engine.placeBetAndStart(store.pendingBet)
+    } else if (store.canCashOut) {
+      engine.cashOut()
+    }
+  }
+}
+
 onMounted(() => {
+  window.addEventListener('keydown', handleKeydown)
+
   const demo = route.query.demo as string | undefined
   if (demo && !store.isPlaying) {
     // Auto-start a demo session
@@ -33,33 +50,21 @@ onMounted(() => {
     }
   }
 
-  // Start the first round if we're in WAITING
-  if (store.phase === 'WAITING') {
+  // A round may have been interrupted by navigating away — resolve whatever
+  // happened while the loop was down (crash, auto-cashout) and continue.
+  if (store.phase === 'RUNNING' || store.phase === 'CRASHED' || store.phase === 'SETTLING') {
+    engine.resumeFromInterruption()
+    return
+  }
+
+  // Start the first round if we're waiting and no round is staged yet
+  if (store.phase === 'WAITING' && !store.currentRound) {
     engine.startBettingPhase()
   }
 })
 
 onUnmounted(() => {
   engine.cleanup()
-})
-
-// Keyboard: space to bet/cashout
-function handleKeydown(e: KeyboardEvent) {
-  if (e.code === 'Space') {
-    e.preventDefault()
-    if (store.phase === 'WAITING') {
-      engine.placeBetAndStart(store.pendingBet)
-    } else if (store.canCashOut) {
-      engine.cashOut()
-    }
-  }
-}
-
-onMounted(() => {
-  window.addEventListener('keydown', handleKeydown)
-})
-
-onUnmounted(() => {
   window.removeEventListener('keydown', handleKeydown)
 })
 
@@ -91,7 +96,7 @@ const phaseLabel = computed(() => {
 const phaseBadgeClass = computed(() => {
   switch (store.phase) {
     case 'WAITING': return 'bg-blue-600/80 text-blue-100'
-    case 'RUNNING': return 'bg-emerald-600/80 text-emerald-100 animate-pulse'
+    case 'RUNNING': return 'bg-emerald-600/80 text-emerald-100 motion-safe:animate-pulse'
     case 'CRASHED':
       if (didCashOut.value) return 'bg-emerald-600/80 text-emerald-100'
       return 'bg-red-600/80 text-red-100'
@@ -110,10 +115,25 @@ const multiplierColor = computed(() => {
   if (m >= 2) return 'text-yellow-400'
   return 'text-emerald-400'
 })
+
+// Round results announced to screen readers (the canvas itself is silent)
+const liveAnnouncement = computed(() => {
+  if (store.phase === 'CRASHED' || store.phase === 'BUSTED') return phaseLabel.value
+  if (store.phase === 'WAITING') return 'Place your bet'
+  return ''
+})
 </script>
 
 <template>
   <div class="flex-1 flex flex-col min-h-0">
+    <!-- Screen reader announcements for round results -->
+    <div
+      aria-live="polite"
+      class="sr-only"
+    >
+      {{ liveAnnouncement }}
+    </div>
+
     <!-- Game header -->
     <header class="flex items-center justify-between px-4 py-2 bg-neutral-900/80 border-b border-neutral-800 shrink-0">
       <div class="flex items-center gap-3">
@@ -133,13 +153,19 @@ const multiplierColor = computed(() => {
           class="text-neutral-500 hover:text-neutral-300 transition-colors"
           @click="showSidebar = !showSidebar"
         >
-          <UIcon :name="showSidebar ? 'i-lucide-panel-right-close' : 'i-lucide-panel-right-open'" class="w-4 h-4" />
+          <UIcon
+            :name="showSidebar ? 'i-lucide-panel-right-close' : 'i-lucide-panel-right-open'"
+            class="w-4 h-4"
+          />
         </button>
         <button
           class="text-neutral-500 hover:text-red-400 transition-colors text-xs flex items-center gap-1"
           @click="showNewGameConfirm = true"
         >
-          <UIcon name="i-lucide-rotate-ccw" class="w-3.5 h-3.5" />
+          <UIcon
+            name="i-lucide-rotate-ccw"
+            class="w-3.5 h-3.5"
+          />
           New Game
         </button>
       </div>
@@ -151,7 +177,10 @@ const multiplierColor = computed(() => {
       <div class="flex-1 flex flex-col min-w-0 min-h-0">
         <!-- Phase badge -->
         <div class="flex items-center justify-center py-2 shrink-0">
-          <span class="px-3 py-1 rounded-full text-xs font-bold" :class="phaseBadgeClass">
+          <span
+            class="px-3 py-1 rounded-full text-xs font-bold"
+            :class="phaseBadgeClass"
+          >
             {{ phaseLabel }}
           </span>
         </div>
@@ -163,7 +192,10 @@ const multiplierColor = computed(() => {
 
         <!-- Multiplier display -->
         <div class="flex items-center justify-center py-3 shrink-0">
-          <div v-if="store.phase === 'RUNNING'" class="text-center">
+          <div
+            v-if="store.phase === 'RUNNING'"
+            class="text-center"
+          >
             <div
               class="text-5xl font-bold font-mono tabular-nums transition-colors"
               :class="multiplierColor"
@@ -171,7 +203,10 @@ const multiplierColor = computed(() => {
               {{ formatMultiplier(store.currentRound?.currentMultiplier || 1) }}
             </div>
           </div>
-          <div v-else-if="store.phase === 'CRASHED' && didCashOut" class="text-center">
+          <div
+            v-else-if="store.phase === 'CRASHED' && didCashOut"
+            class="text-center"
+          >
             <div class="text-5xl font-bold font-mono tabular-nums text-emerald-400">
               {{ formatMultiplier(store.currentRound?.cashoutMultiplier || 1) }}
             </div>
@@ -179,7 +214,10 @@ const multiplierColor = computed(() => {
               +{{ formatCents(Math.floor((store.currentRound?.betAmount || 0) * (store.currentRound?.cashoutMultiplier || 0)) - (store.currentRound?.betAmount || 0)) }}
             </div>
           </div>
-          <div v-else-if="store.phase === 'CRASHED'" class="text-center">
+          <div
+            v-else-if="store.phase === 'CRASHED'"
+            class="text-center"
+          >
             <div class="text-5xl font-bold font-mono tabular-nums text-red-500">
               {{ formatMultiplier(store.currentRound?.crashPoint || 1) }}
             </div>
@@ -194,7 +232,12 @@ const multiplierColor = computed(() => {
             <p class="text-2xl font-bold text-red-500">
               Bankroll Exhausted
             </p>
-            <UButton color="amber" label="Re-buy" class="mt-3" @click="engine.rebuy()" />
+            <UButton
+              color="primary"
+              label="Re-buy"
+              class="mt-3"
+              @click="engine.rebuy()"
+            />
           </div>
         </div>
 
@@ -232,7 +275,7 @@ const multiplierColor = computed(() => {
             @click="showNewGameConfirm = false"
           />
           <UButton
-            color="red"
+            color="error"
             label="New Game"
             icon="i-lucide-rotate-ccw"
             @click="confirmNewGame"

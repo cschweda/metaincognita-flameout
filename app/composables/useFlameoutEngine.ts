@@ -1,15 +1,28 @@
-import { ref, computed } from 'vue'
 import { useFlameoutStore } from '~/stores/flameout'
-import { generateCrashPoint, currentMultiplier } from '~/utils/flameout-math'
+import { generateCrashPoint, currentMultiplier, timeToMultiplier } from '~/utils/flameout-math'
+import type { GamePhase } from '~/types/flameout'
+
+/**
+ * Round driver for the crash game.
+ *
+ * State is module-scoped: every component that calls useFlameoutEngine()
+ * shares the same loop and timers, so cleanup() cancels work scheduled from
+ * anywhere (game page, controls, layout).
+ *
+ * Time is derived from currentRound.startedAt (wall clock), not from an
+ * accumulator owned by the animation loop. A round therefore keeps "flowing"
+ * while the page is unmounted, and resumeFromInterruption() can resolve
+ * exactly what happened in the meantime — there is no way to freeze a round
+ * mid-flight and cash out risk-free.
+ */
+
+let animationFrameId: number | null = null
+let settleTimerId: ReturnType<typeof setTimeout> | null = null
+let nextRoundTimerId: ReturnType<typeof setTimeout> | null = null
+let lastTickPerf = 0
 
 export function useFlameoutEngine() {
   const store = useFlameoutStore()
-
-  const animationFrameId = ref<number | null>(null)
-  const roundStartTime = ref<number>(0)
-  const bettingTimerId = ref<ReturnType<typeof setTimeout> | null>(null)
-
-  const isAnimating = computed(() => animationFrameId.value !== null)
 
   function startBettingPhase() {
     store.setPhase('WAITING')
@@ -20,31 +33,17 @@ export function useFlameoutEngine() {
 
     // Auto-place bet and start immediately if auto-bet is enabled
     if (store.settings.autoBet && store.pendingBet <= store.bankroll.balance) {
-      placeBet(store.pendingBet)
+      store.placeBet(store.pendingBet)
       startRunningPhase()
       return
     }
 
-    // Otherwise wait for the player to manually place a bet — no timeout loop.
-    // The round starts when the player clicks "Place Bet".
-  }
-
-  function placeBet(amountCents: number) {
-    if (store.phase !== 'WAITING') return false
-    store.placeBet(amountCents)
-    return true
+    // Otherwise wait for the player — the round starts on "Place Bet".
   }
 
   function placeBetAndStart(amountCents: number) {
     if (store.phase !== 'WAITING') return false
     store.placeBet(amountCents)
-
-    // Clear betting timer and start immediately
-    if (bettingTimerId.value) {
-      clearTimeout(bettingTimerId.value)
-      bettingTimerId.value = null
-    }
-
     startRunningPhase()
     return true
   }
@@ -53,9 +52,9 @@ export function useFlameoutEngine() {
     if (!store.currentRound) return
 
     store.setPhase('RUNNING')
-    roundStartTime.value = performance.now()
-
-    // Start animation loop
+    store.beginRun()
+    lastTickPerf = performance.now()
+    stopAnimation()
     tick()
   }
 
@@ -65,12 +64,28 @@ export function useFlameoutEngine() {
       return
     }
 
-    const elapsed = performance.now() - roundStartTime.value
-    const multiplier = currentMultiplier(elapsed, store.settings.speedFactor)
+    const nowPerf = performance.now()
+    const dt = nowPerf - lastTickPerf
+    lastTickPerf = nowPerf
 
+    // Jackpot spin: freeze round time by pushing the start timestamp forward.
+    // The multiplier holds, so a spin can never carry the round past its
+    // crash point (and cashout is blocked by the store while spinning).
+    if (store.jackpotSpinActive) {
+      store.shiftRoundStart(dt)
+    }
+
+    const elapsed = Date.now() - store.currentRound.startedAt
+    const multiplier = currentMultiplier(elapsed, store.settings.speedFactor)
     store.updateMultiplier(multiplier, elapsed)
 
-    // Check auto-cashout (suspended during jackpot spin)
+    // Crash is checked before auto-cashout: reaching the crash point and the
+    // target in the same frame is a loss, same as a real crash game.
+    if (multiplier >= store.currentRound.crashPoint && !store.jackpotSpinActive) {
+      crash()
+      return
+    }
+
     if (
       store.settings.autoCashoutTarget
       && !store.currentRound.cashedOut
@@ -79,31 +94,22 @@ export function useFlameoutEngine() {
       && !store.jackpotSpinActive
     ) {
       cashOut()
-    }
-
-    // Check crash (suspended during jackpot spin)
-    if (multiplier >= store.currentRound.crashPoint && !store.jackpotSpinActive) {
-      crash()
       return
     }
 
-    animationFrameId.value = requestAnimationFrame(tick)
+    animationFrameId = requestAnimationFrame(tick)
   }
 
-  function cashOut(): boolean {
+  function cashOut(atMultiplier?: number): boolean {
     if (!store.canCashOut || !store.currentRound) return false
 
-    const multiplier = store.currentRound.currentMultiplier
+    const multiplier = atMultiplier ?? store.currentRound.currentMultiplier
     store.cashOut(multiplier)
 
     // Stop the round immediately — don't keep running to the crash
     stopAnimation()
     store.setPhase('CRASHED') // reuse CRASHED phase to show result
-
-    // Settle after a brief pause to show the cashout result
-    setTimeout(() => {
-      settle()
-    }, 1500)
+    scheduleSettle()
 
     return true
   }
@@ -111,47 +117,96 @@ export function useFlameoutEngine() {
   function crash() {
     if (!store.currentRound) return
 
-    store.updateMultiplier(store.currentRound.crashPoint, store.currentRound.elapsedMs)
+    const crashElapsed = Math.round(timeToMultiplier(store.currentRound.crashPoint, store.settings.speedFactor))
+    store.updateMultiplier(store.currentRound.crashPoint, crashElapsed)
     store.setPhase('CRASHED')
     stopAnimation()
+    scheduleSettle()
+  }
 
-    // Settle after a brief pause
-    setTimeout(() => {
+  function scheduleSettle(delayMs = 1500) {
+    if (settleTimerId) clearTimeout(settleTimerId)
+    settleTimerId = setTimeout(() => {
+      settleTimerId = null
       settle()
-    }, 1500)
+    }, delayMs)
   }
 
   function settle() {
+    // The session may have been ended (New Game / Leave) while settling
+    if (store.phase === 'SETUP' || store.phase === 'BUSTED') return
+
     store.setPhase('SETTLING')
     store.settleRound()
     store.saveToLocalStorage()
 
-    // Check bust
-    if (store.phase === 'BUSTED') return
+    // settleRound() may flip the phase to BUSTED (TS can't see the mutation)
+    if ((store.phase as GamePhase) === 'BUSTED') return
 
     // Auto-start next round after brief pause
-    setTimeout(() => {
+    if (nextRoundTimerId) clearTimeout(nextRoundTimerId)
+    nextRoundTimerId = setTimeout(() => {
+      nextRoundTimerId = null
       if (store.phase !== 'BUSTED' && store.phase !== 'SETUP') {
         startBettingPhase()
       }
     }, 500)
   }
 
-  function stopAnimation() {
-    if (animationFrameId.value !== null) {
-      cancelAnimationFrame(animationFrameId.value)
-      animationFrameId.value = null
+  /**
+   * Re-enter a session after the game page was unmounted (navigation away)
+   * or reloaded mid-round. Resolves whatever happened while the loop was
+   * down, in game-time order: auto-cashout first if its target was reached
+   * before the crash point, then the crash itself, else resume ticking.
+   */
+  function resumeFromInterruption() {
+    // Any canvas-local spin state died with the component
+    store.jackpotSpinActive = false
+
+    if (store.phase === 'SETTLING') {
+      // Settle was interrupted — finish it now
+      stopAnimation()
+      store.setPhase('CRASHED')
+      scheduleSettle(300)
+      return
     }
+
+    if (store.phase === 'CRASHED') {
+      // Interrupted during the result pause — give it a short beat, then settle
+      scheduleSettle(800)
+      return
+    }
+
+    if (store.phase !== 'RUNNING' || !store.currentRound) return
+
+    const round = store.currentRound
+    const speed = store.settings.speedFactor
+    const elapsed = Date.now() - round.startedAt
+    const crashMs = timeToMultiplier(round.crashPoint, speed)
+    const target = store.settings.autoCashoutTarget
+    const hasLiveBet = round.betAmount > 0 && !round.cashedOut
+
+    if (hasLiveBet && target && target < round.crashPoint && elapsed >= timeToMultiplier(target, speed)) {
+      store.updateMultiplier(target, Math.round(timeToMultiplier(target, speed)))
+      cashOut(target)
+      return
+    }
+
+    if (elapsed >= crashMs) {
+      crash()
+      return
+    }
+
+    lastTickPerf = performance.now()
+    stopAnimation()
+    tick()
   }
 
-  function stopGame() {
-    stopAnimation()
-    if (bettingTimerId.value) {
-      clearTimeout(bettingTimerId.value)
-      bettingTimerId.value = null
+  function stopAnimation() {
+    if (animationFrameId !== null) {
+      cancelAnimationFrame(animationFrameId)
+      animationFrameId = null
     }
-    store.saveToLocalStorage()
-    store.setPhase('SETUP')
   }
 
   function rebuy() {
@@ -159,22 +214,25 @@ export function useFlameoutEngine() {
     startBettingPhase()
   }
 
+  /** Cancel the loop and every pending timer — nothing survives unmount. */
   function cleanup() {
     stopAnimation()
-    if (bettingTimerId.value) {
-      clearTimeout(bettingTimerId.value)
-      bettingTimerId.value = null
+    if (settleTimerId) {
+      clearTimeout(settleTimerId)
+      settleTimerId = null
+    }
+    if (nextRoundTimerId) {
+      clearTimeout(nextRoundTimerId)
+      nextRoundTimerId = null
     }
   }
 
   return {
-    isAnimating,
     startBettingPhase,
-    placeBet,
     placeBetAndStart,
     cashOut,
-    stopGame,
     rebuy,
+    resumeFromInterruption,
     cleanup
   }
 }

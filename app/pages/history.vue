@@ -33,13 +33,19 @@ function crashColor(point: number): string {
         </p>
       </div>
 
-      <div v-if="reversedHistory.length === 0" class="text-center py-16">
+      <div
+        v-if="reversedHistory.length === 0"
+        class="text-center py-16"
+      >
         <p class="text-neutral-600">
           No rounds played yet. Start a game to see history.
         </p>
       </div>
 
-      <div v-else class="rounded-xl border border-neutral-800 overflow-hidden">
+      <div
+        v-else
+        class="rounded-xl border border-neutral-800 overflow-hidden"
+      >
         <table class="w-full text-sm">
           <thead class="bg-neutral-900/80">
             <tr class="text-neutral-500 text-xs uppercase tracking-wider">
@@ -64,17 +70,27 @@ function crashColor(point: number): string {
             </tr>
           </thead>
           <tbody class="divide-y divide-neutral-800/50">
-            <tr v-for="round in reversedHistory" :key="round.id" class="hover:bg-neutral-900/40">
+            <tr
+              v-for="round in reversedHistory"
+              :key="round.id"
+              class="hover:bg-neutral-900/40"
+            >
               <td class="px-4 py-2 text-neutral-500 font-mono text-xs">
                 {{ round.id }}
               </td>
-              <td class="px-4 py-2 text-right font-mono font-bold" :class="crashColor(round.crashPoint)">
+              <td
+                class="px-4 py-2 text-right font-mono font-bold"
+                :class="crashColor(round.crashPoint)"
+              >
                 {{ formatMultiplier(round.crashPoint) }}
               </td>
               <td class="px-4 py-2 text-right text-neutral-300 font-mono">
                 {{ round.bet > 0 ? formatCents(round.bet) : '—' }}
               </td>
-              <td class="px-4 py-2 text-right font-mono" :class="round.cashoutMultiplier ? 'text-emerald-400' : 'text-neutral-600'">
+              <td
+                class="px-4 py-2 text-right font-mono"
+                :class="round.cashoutMultiplier ? 'text-emerald-400' : 'text-neutral-600'"
+              >
                 {{ round.cashoutMultiplier ? formatMultiplier(round.cashoutMultiplier) : '—' }}
               </td>
               <td

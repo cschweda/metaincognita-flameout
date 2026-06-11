@@ -140,10 +140,10 @@ export function runBatchSimulation(config: BatchSimConfig): BatchSimResult {
 /**
  * All available strategy types with display names.
  */
-export const STRATEGY_OPTIONS: { value: StrategyType; label: string; description: string }[] = [
+export const STRATEGY_OPTIONS: { value: StrategyType, label: string, description: string }[] = [
   { value: 'flat', label: 'Flat', description: 'Same bet every round' },
   { value: 'martingale', label: 'Martingale', description: 'Double after loss, reset after win' },
-  { value: 'dalembert', label: "D'Alembert", description: 'Increase by base after loss, decrease after win' },
+  { value: 'dalembert', label: 'D\'Alembert', description: 'Increase by base after loss, decrease after win' },
   { value: 'fibonacci', label: 'Fibonacci', description: 'Follow Fibonacci sequence on losses' },
   { value: 'paroli', label: 'Paroli', description: 'Double after win (up to 3), reset after loss' }
 ]

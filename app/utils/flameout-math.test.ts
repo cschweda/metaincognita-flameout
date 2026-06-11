@@ -67,17 +67,7 @@ describe('generateCrashPoint', () => {
     const houseEdge = 3
     const rtp = 1 - houseEdge / 100
     const rounds = 100_000
-    const rng = mulberry32(789)
-    let totalPayout = 0
 
-    for (let i = 0; i < rounds; i++) {
-      const cp = generateCrashPoint(houseEdge, rng)
-      // Simulate a $1 bet cashing out at crash point (best case)
-      totalPayout += cp
-    }
-
-    // Mean crash point should approximate 1/(1-rtp) = 1/houseEdge... actually
-    // The mean of the distribution is complex. Instead verify RTP via the strategy:
     // If you always cash out at 2x, empirical RTP = P(>=2) * 2
     let returned = 0
     const rng2 = mulberry32(999)
@@ -207,7 +197,7 @@ describe('binProbability', () => {
       [10.00, 50.00],
       [50.00, Infinity]
     ]
-    const total = bins.reduce((s, [min, max]) => s + binProbability(min, max, 3), 0)
+    const total = bins.reduce((s, [min, max]) => s + binProbability(min!, max!, 3), 0)
     // Small gap between 1.00 and 1.01 is expected due to crash point flooring
     expect(total).toBeGreaterThan(0.98)
     expect(total).toBeLessThanOrEqual(1.0)

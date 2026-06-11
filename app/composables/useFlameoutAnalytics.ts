@@ -17,7 +17,7 @@ export function useFlameoutAnalytics() {
     const total = store.roundHistory.length
     if (total === 0) return []
 
-    return DISTRIBUTION_BINS.map(bin => {
+    return DISTRIBUTION_BINS.map((bin) => {
       const count = store.roundHistory.filter((r) => {
         if (bin.min === 1.00 && bin.max === 1.00) return r.crashPoint === 1.00
         if (bin.max === Infinity) return r.crashPoint >= bin.min
@@ -95,9 +95,9 @@ export function useFlameoutAnalytics() {
     const sorted = [...store.roundHistory].sort((a, b) => a.crashPoint - b.crashPoint)
     const mid = Math.floor(sorted.length / 2)
     if (sorted.length % 2 === 0) {
-      return (sorted[mid - 1].crashPoint + sorted[mid].crashPoint) / 2
+      return (sorted[mid - 1]!.crashPoint + sorted[mid]!.crashPoint) / 2
     }
-    return sorted[mid].crashPoint
+    return sorted[mid]!.crashPoint
   })
 
   /**

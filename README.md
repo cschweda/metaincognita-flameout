@@ -44,26 +44,27 @@ The format was born in the cryptocurrency casino community in 2014 and has since
 Three selectable game modes on the setup screen:
 
 - **Classic** — The original crash game. Watch the multiplier rise and cash out before the crash. Pure math, pure tension.
-- **Gauntlet** — Steer the jet vertically (arrow keys / W/S) to collect bonuses (coins, stars, diamonds) and dodge obstacles (mines, asteroids) as the multiplier climbs. Bonuses and penalties apply directly to your bankroll. The jet flies level like Scramble/Zaxxon — no tilting, just vertical translation. Items spawn ahead and scroll from right to left with increasing frequency. The core crash mechanics and house edge are unchanged — the items are a side game layered on top that adds variance and engagement.
-- **Jackpot** — Collect golden slot triggers to spin a 3-reel slot machine. Triple 7s pay 25× the trigger value, triple match pays 10×, double match pays 3×. Crash mechanics are suspended during an active spin — the multiplier keeps climbing but won't crash until the reels finish. Base values increase as the game progresses.
+- **Gauntlet** — Steer the jet vertically (arrow keys / W/S) to collect bonuses (coins, stars, diamonds) and dodge obstacles (mines, asteroids) as the multiplier climbs. The jet flies level like Scramble/Zaxxon — no tilting, just vertical translation. Items spawn ahead and scroll from right to left with increasing frequency. The item mix is balanced to **zero expected value** (verified by unit test), so the side game adds variance and a skill element — not free money.
+- **Jackpot** — Grab golden slot triggers to stake a 3-reel spin: the trigger's stake is deducted from your bankroll, and the reels pay 10× the stake for triple 7s, 5× for other triples, 2× for doubles (EV exactly equals the stake — variance only). Round time **freezes** while the reels roll, so a spin can never carry the round past its predetermined crash point. Stakes grow as the round progresses.
 
-All variants share the same underlying crash point math, house edge, and EV. The variant mechanics add engagement and distraction — exactly the psychology real casino crash game variants exploit.
+All variants share the same underlying crash point math and house edge. Side-game results are tracked separately from crash wagering (shown as "Side-Game Net" in the stats), so the empirical RTP you observe always reflects the crash game alone. The variant mechanics add engagement and distraction — exactly the psychology real casino crash game variants exploit, except real casinos price their bonus features *into* the edge rather than balancing them to zero.
 
 ### Analytics & Education
 - **Probability Explorer**: Enter any multiplier target and see the exact probability, implied odds, break-even rate, and EV
 - **Session Statistics**: Running totals of rounds played, win/loss, total wagered, empirical RTP, streaks, peak balance, max drawdown
 - **Crash Point Distribution**: Observed vs. theoretical distribution histogram — converges over many rounds (law of large numbers)
 - **Streak Analysis**: Current and historical streak tracking with conditional probability display
-- **Strategy Lab** (batch simulation): Configure Flat, Martingale, D'Alembert, Fibonacci, or Paroli systems and simulate 100K+ rounds instantly
+- **Strategy Lab** (on the Analysis page): Configure Flat, Martingale, D'Alembert, Fibonacci, or Paroli systems and simulate 100K+ rounds instantly — including a compare-all mode that runs every system against the identical seeded crash sequence and charts the balance curves side by side
+- **Learn page** (`/learn`): The full mathematics — distribution, EV-invariance proof, variance profiles, gambler's fallacy, provably fair cryptography, and the history of the genre
 
 ### UI
 - Dark mode interface (Bloomberg terminal aesthetic)
 - Animated canvas background: parallax starfield, nebula wisps, dynamic gradient sky that shifts with multiplier, horizon glow, vignette, screen shake on crash
 - Branded SPA loading screen with animated progress bar (matches Metaincognita suite aesthetic)
 - Setup screen with game mode selector → Game screen with right-hand stats sidebar
-- Bottom navigation: History and Analysis pages with GitHub link
-- Keyboard controls (Space to bet/cashout, arrow keys to steer in variant modes)
-- Accessible modals with screen reader support
+- Bottom navigation: History, Analysis, and Learn pages with GitHub link
+- Keyboard controls (Space to bet/cashout, arrow keys to steer in variant modes — inputs are never hijacked while typing in a field)
+- Accessible modals with screen reader support, live round-result announcements, and `prefers-reduced-motion` support (static starfield, no shake/pulse)
 - Demo mode via URL parameter (`?demo=1&mode=classic`)
 - Responsive layout
 
@@ -98,6 +99,7 @@ Open [http://localhost:3000](http://localhost:3000).
 | Command | Description |
 |---|---|
 | `pnpm dev` | Start development server |
+| `pnpm dev:fresh` | Kill any running dev server, then start a fresh one (`PORT=3001` to override) |
 | `pnpm build` | Build for production |
 | `pnpm preview` | Preview production build |
 | `pnpm test` | Run unit tests |
@@ -112,33 +114,37 @@ Open [http://localhost:3000](http://localhost:3000).
 ```
 app/
   composables/
-    useFlameoutEngine.ts       — Round state machine, cashout, bankroll
+    useFlameoutEngine.ts       — Round state machine, cashout, timestamp-based timing, resume
     useFlameoutAnalytics.ts    — Session stats, distributions, probabilities
     useFlameoutStrategy.ts     — Betting systems, batch simulation
   stores/
-    flameout.ts                — Pinia store (single source of truth)
+    flameout.ts                — Pinia store (single source of truth, versioned persistence)
   types/
     flameout.ts                — All shared interfaces and enums
   utils/
     flameout-math.ts           — Pure math: crash point gen, probability, EV
     flameout-rng.ts            — Seeded PRNG (mulberry32)
+    flameout-variants.ts       — Pure variant logic: item economy, slot reels (EV-tested)
+    canvas-draw.ts             — Pure rendering: background, sprites, slot overlay
   components/flameout/
-    Canvas.vue                 — Multiplier curve, background, variant rendering
+    Canvas.vue                 — Render loop, collision, variant orchestration
     Controls.vue               — Bet input, cashout button, auto-cashout
     HistoryStrip.vue           — Color-coded crash point badges
     HowToPlay.vue              — First-visit tutorial modal
     Stats.vue                  — Session/Probability sidebar
+    StrategyLab.vue            — Batch simulation UI with compare-all chart
   spa-loading-template.html    — Branded dark loading screen
   pages/
     index.vue                  — Setup screen
     game.vue                   — Main game
     history.vue                — Round history table
-    analysis.vue               — Session analysis dashboard
+    analysis.vue               — Session analysis dashboard + Strategy Lab
+    learn.vue                  — The mathematics, provably fair, and history
   layouts/
     default.vue                — App shell (top bar, bottom bar)
 ```
 
-The headless engine pattern separates game logic from rendering. All math lives in pure functions (`flameout-math.ts`), all state in the Pinia store, and all UI in Vue components. The engine can run in real-time (animated) or instant mode (batch simulation) with no code changes.
+The headless engine pattern separates game logic from rendering. All math lives in pure functions (`flameout-math.ts`, `flameout-variants.ts`), all state in the Pinia store, and all UI in Vue components. Round timing derives from wall-clock timestamps rather than the animation loop, so rounds resolve correctly even if the page unmounts mid-flight — navigating away can never freeze a round into a risk-free cashout. The engine can run in real-time (animated) or instant mode (batch simulation) with no code changes.
 
 ---
 
