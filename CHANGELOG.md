@@ -2,6 +2,12 @@
 
 All notable changes to Flameout will be documented in this file.
 
+## [0.4.1] - 2026-06-11
+
+### Fixed
+
+- **Icons missing on the deployed site**: @nuxt/icon was fetching icon data from `api.iconify.design` at runtime (static hosting has no server icon endpoint), which the CSP's `connect-src 'self'` blocked — every icon failed to load in production. All 18 icons used by the app are now bundled into the client build (`icon.clientBundle`, ~5.7KB uncompressed), so there are zero runtime icon requests. Pre-existing bug, not a 0.4.0 regression — `connect-src 'self'` has been in the CSP since the first Netlify config
+
 ## [0.4.0] - 2026-06-11
 
 ### Added

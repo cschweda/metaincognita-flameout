@@ -39,5 +39,17 @@ export default defineNuxtConfig({
         braceStyle: '1tbs'
       }
     }
+  },
+
+  // Bundle all icons used in source into the client build. Without this,
+  // @nuxt/icon falls back to fetching icon data from api.iconify.design at
+  // runtime on static hosting — which the CSP (connect-src 'self') blocks.
+  // The explicit list covers icons referenced outside the scan globs
+  // (GAME_MODES in app/types/flameout.ts).
+  icon: {
+    clientBundle: {
+      scan: true,
+      icons: ['lucide:flame', 'lucide:swords', 'lucide:diamond']
+    }
   }
 })
