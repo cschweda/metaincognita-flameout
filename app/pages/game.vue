@@ -9,6 +9,8 @@ const engine = useFlameoutEngine()
 
 // Keyboard: space to bet/cashout — but never while typing in a field
 function handleKeydown(e: KeyboardEvent) {
+  // Key repeat would place a bet and instantly cash out at ~1.00×
+  if (e.repeat) return
   const target = e.target as HTMLElement | null
   if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable)) {
     return

@@ -8,7 +8,8 @@ import {
   hourlyCostCents,
   breakEvenRate,
   binProbability,
-  timeToMultiplier
+  timeToMultiplier,
+  clampNumber
 } from './flameout-math'
 import { mulberry32 } from './flameout-rng'
 
@@ -201,5 +202,20 @@ describe('binProbability', () => {
     // Small gap between 1.00 and 1.01 is expected due to crash point flooring
     expect(total).toBeGreaterThan(0.98)
     expect(total).toBeLessThanOrEqual(1.0)
+  })
+})
+
+describe('clampNumber', () => {
+  it('clamps into the range and passes through in-range values', () => {
+    expect(clampNumber(5, 0.5, 10, 3)).toBe(5)
+    expect(clampNumber(-2, 0.5, 10, 3)).toBe(0.5)
+    expect(clampNumber(50, 0.5, 10, 3)).toBe(10)
+  })
+
+  it('falls back for non-finite or non-numeric input', () => {
+    expect(clampNumber(Number.NaN, 0.5, 10, 3)).toBe(3)
+    expect(clampNumber(Infinity, 0.5, 10, 3)).toBe(3)
+    expect(clampNumber('7' as unknown, 0.5, 10, 3)).toBe(3)
+    expect(clampNumber(undefined, 0.5, 10, 3)).toBe(3)
   })
 })

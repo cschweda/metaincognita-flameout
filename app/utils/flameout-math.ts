@@ -81,6 +81,17 @@ export function breakEvenRate(multiplier: number): number {
 }
 
 /**
+ * Clamp a free-typed input into [min, max]; non-finite or non-numeric
+ * values fall back. HTML min/max attributes don't constrain typed values,
+ * so every custom numeric input goes through this before it reaches game
+ * settings or a simulation.
+ */
+export function clampNumber(value: unknown, min: number, max: number, fallback: number): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return fallback
+  return Math.min(max, Math.max(min, value))
+}
+
+/**
  * Distribution bins for crash point histogram.
  */
 export const DISTRIBUTION_BINS = [

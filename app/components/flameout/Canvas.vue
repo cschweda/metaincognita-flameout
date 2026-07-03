@@ -195,8 +195,8 @@ function updateJackpot(currentMs: number, dt: number) {
       activeSpin.phase = 'stop3'
     } else if (activeSpin.phase === 'stop3' && elapsed > 1600) {
       activeSpin.phase = 'result'
+      // Balance was already settled at collection — this is just the reveal
       if (activeSpin.payout > 0) {
-        store.applySideGameDelta(activeSpin.payout)
         sideNetThisRound += activeSpin.payout
         const isTriple = activeSpin.reels[0] === activeSpin.reels[1] && activeSpin.reels[1] === activeSpin.reels[2]
         floatingTexts.push({
@@ -440,7 +440,13 @@ function draw() {
               continue
             }
             trigger.collected = true
-            store.applySideGameDelta(-trigger.stake)
+            const reels = rollReels()
+            const payout = calcSlotPayout(reels, trigger.stake)
+            // Money settles at collection — the reel animation is pure
+            // presentation, so unmounting mid-spin can never eat a winning
+            // spin's payout. The HUD and floating text still reveal the
+            // outcome only when the reels stop.
+            store.applySideGameDelta(payout - trigger.stake)
             sideNetThisRound -= trigger.stake
             floatingTexts.push({
               x: tX, y: tY - 20,
@@ -449,13 +455,12 @@ function draw() {
               life: 0,
               maxLife: 1400
             })
-            const reels = rollReels()
             activeSpin = {
               phase: 'spinning',
               reels,
               startTime: globalTime,
               stake: trigger.stake,
-              payout: calcSlotPayout(reels, trigger.stake),
+              payout,
               triggerX: tX,
               triggerY: tY
             }

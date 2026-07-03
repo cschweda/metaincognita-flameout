@@ -2,6 +2,7 @@
 import { formatCents, dollarsToCents } from '~/types/flameout'
 import type { BatchSimResult, StrategyType } from '~/types/flameout'
 import { runBatchSimulation, STRATEGY_OPTIONS } from '~/composables/useFlameoutStrategy'
+import { clampNumber } from '~/utils/flameout-math'
 
 const STRATEGY_COLORS: Record<StrategyType, string> = {
   flat: '#34d399',
@@ -42,6 +43,14 @@ const runs = ref<LabRun[]>([])
 const simDurationMs = ref<number | null>(null)
 
 function runSimulation() {
+  // Clamp free-typed inputs (a cashout target below 1.01× would "win" every
+  // round at a nonsense RTP) and write back so the form shows the values
+  // actually simulated.
+  baseBetDollars.value = clampNumber(baseBetDollars.value, 0.1, 100, 1)
+  cashoutTarget.value = clampNumber(cashoutTarget.value, 1.01, 1000, 2)
+  bankrollDollars.value = clampNumber(bankrollDollars.value, 10, 1_000_000, 1000)
+  if (!Number.isFinite(seed.value)) seed.value = 1337
+
   const types: StrategyType[] = compareAll.value
     ? STRATEGY_OPTIONS.map(o => o.value)
     : [strategyType.value]

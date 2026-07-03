@@ -7,12 +7,17 @@ import type {
   CurrentRound,
   SetupConfig
 } from '~/types/flameout'
-import { DEFAULT_SETTINGS, dollarsToCents } from '~/types/flameout'
+import { DEFAULT_SETTINGS, GAME_MODES, dollarsToCents } from '~/types/flameout'
+import { clampNumber } from '~/utils/flameout-math'
 
 const STORAGE_KEY = 'flameout-session'
 
 // Bump when the persisted shape changes; loadFromLocalStorage migrates.
-const STORAGE_VERSION = 2
+// v3: in-flight rounds persist (currentRound + real phase) so a reload or
+// closed tab resolves the round instead of rolling the bet back.
+const STORAGE_VERSION = 3
+
+const GAME_PHASES: GamePhase[] = ['SETUP', 'WAITING', 'RUNNING', 'CRASHED', 'SETTLING', 'BUSTED']
 
 function emptyBankroll(balanceCents = 0): BankrollState {
   return {
@@ -43,6 +48,27 @@ function sanitizeBankroll(raw: unknown): BankrollState {
     clean[key] = asFiniteNumber(source[key], clean[key])
   }
   return clean
+}
+
+/** Coerce a persisted in-flight round; null if it can't be resolved. */
+function sanitizeRound(raw: unknown): CurrentRound | null {
+  if (!raw || typeof raw !== 'object') return null
+  const source = raw as Record<string, unknown>
+  const { crashPoint, startedAt, cashoutMultiplier } = source
+  // Without a valid crash point and start timestamp the round has no outcome
+  if (typeof crashPoint !== 'number' || !Number.isFinite(crashPoint) || crashPoint < 1) return null
+  if (typeof startedAt !== 'number' || !Number.isFinite(startedAt) || startedAt <= 0) return null
+  return {
+    crashPoint,
+    currentMultiplier: Math.max(1, asFiniteNumber(source.currentMultiplier, 1)),
+    betAmount: Math.max(0, asFiniteNumber(source.betAmount, 0)),
+    startedAt,
+    elapsedMs: Math.max(0, asFiniteNumber(source.elapsedMs, 0)),
+    cashedOut: source.cashedOut === true,
+    cashoutMultiplier: typeof cashoutMultiplier === 'number' && Number.isFinite(cashoutMultiplier)
+      ? cashoutMultiplier
+      : null
+  }
 }
 
 export const useFlameoutStore = defineStore('flameout', {
@@ -111,14 +137,16 @@ export const useFlameoutStore = defineStore('flameout', {
 
   actions: {
     initializeGame(config: SetupConfig) {
-      const bankrollCents = dollarsToCents(config.startingBankroll)
+      // Setup values arrive from free-typed inputs — clamp to the documented
+      // ranges so a negative edge or zero bankroll can't start a broken game.
+      const bankrollCents = dollarsToCents(clampNumber(config.startingBankroll, 1, 1_000_000, 1000))
 
       this.settings = {
         ...DEFAULT_SETTINGS,
-        houseEdgePercent: config.houseEdgePercent,
+        houseEdgePercent: clampNumber(config.houseEdgePercent, 0.5, 10, DEFAULT_SETTINGS.houseEdgePercent),
         startingBankroll: bankrollCents,
-        speedFactor: config.speedFactor,
-        gameMode: config.gameMode || 'classic'
+        speedFactor: clampNumber(config.speedFactor, 0.25, 10, DEFAULT_SETTINGS.speedFactor),
+        gameMode: GAME_MODES.some(m => m.id === config.gameMode) ? config.gameMode : 'classic'
       }
 
       this.bankroll = emptyBankroll(bankrollCents)
@@ -128,6 +156,10 @@ export const useFlameoutStore = defineStore('flameout', {
       this.pendingBet = Math.min(1000, bankrollCents)
       this.jackpotSpinActive = false
       this.phase = 'WAITING'
+
+      // A session exists the moment it's configured — navigating back to the
+      // setup screen must find it resumable, not wipe it.
+      this.saveToLocalStorage()
     },
 
     setPhase(phase: GamePhase) {
@@ -284,6 +316,10 @@ export const useFlameoutStore = defineStore('flameout', {
 
     saveToLocalStorage() {
       try {
+        // The real phase and the in-flight round are persisted: elapsed time
+        // derives from currentRound.startedAt (wall clock), so a reload can
+        // resolve exactly what happened while the app was closed. Closing the
+        // tab is never an undo.
         const data = {
           version: STORAGE_VERSION,
           settings: this.settings,
@@ -291,9 +327,8 @@ export const useFlameoutStore = defineStore('flameout', {
           roundHistory: this.roundHistory,
           nextRoundId: this.nextRoundId,
           pendingBet: this.pendingBet,
-          phase: this.phase === 'RUNNING' || this.phase === 'CRASHED' || this.phase === 'SETTLING'
-            ? 'WAITING'
-            : this.phase
+          phase: this.phase,
+          currentRound: this.currentRound
         }
         localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
       } catch {
@@ -321,8 +356,15 @@ export const useFlameoutStore = defineStore('flameout', {
         this.nextRoundId = asFiniteNumber(data.nextRoundId, maxHistoryId + 1)
 
         this.pendingBet = asFiniteNumber(data.pendingBet, 1000)
-        this.phase = data.phase || 'WAITING'
-        this.currentRound = null
+        this.phase = GAME_PHASES.includes(data.phase) ? data.phase : 'WAITING'
+        this.currentRound = sanitizeRound(data.currentRound)
+
+        // An in-flight phase without a resolvable round (v2 payloads, corrupt
+        // data) can't continue — park at the betting screen.
+        if (!this.currentRound && (this.phase === 'RUNNING' || this.phase === 'CRASHED' || this.phase === 'SETTLING')) {
+          this.phase = 'WAITING'
+        }
+
         this.jackpotSpinActive = false
         return true
       } catch {

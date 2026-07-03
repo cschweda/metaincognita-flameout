@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
+import type { GameMode } from '~/types/flameout'
 import { useFlameoutStore } from './flameout'
 
 function freshStore() {
@@ -147,6 +148,53 @@ describe('flameout store', () => {
       expect(store.phase).toBe('SETUP')
     })
 
+    it('persists and restores an in-flight round with its phase', () => {
+      const store = freshStore()
+      store.startRound(2.5)
+      store.placeBet(500)
+      store.setPhase('RUNNING')
+      store.saveToLocalStorage()
+
+      setActivePinia(createPinia())
+      const reloaded = useFlameoutStore()
+      expect(reloaded.loadFromLocalStorage()).toBe(true)
+      expect(reloaded.phase).toBe('RUNNING')
+      expect(reloaded.currentRound).not.toBeNull()
+      expect(reloaded.currentRound!.crashPoint).toBe(2.5)
+      expect(reloaded.currentRound!.betAmount).toBe(500)
+      expect(reloaded.currentRound!.startedAt).toBe(store.currentRound!.startedAt)
+    })
+
+    it('parks at WAITING when an in-flight phase has no usable round', () => {
+      const payload = {
+        version: 3,
+        settings: {},
+        bankroll: {},
+        roundHistory: [],
+        pendingBet: 1000,
+        phase: 'RUNNING',
+        currentRound: { crashPoint: 'corrupt' }
+      }
+      localStorage.setItem('flameout-session', JSON.stringify(payload))
+      setActivePinia(createPinia())
+      const store = useFlameoutStore()
+      expect(store.loadFromLocalStorage()).toBe(true)
+      expect(store.phase).toBe('WAITING')
+      expect(store.currentRound).toBeNull()
+    })
+
+    it('initializeGame persists the fresh session immediately', () => {
+      setActivePinia(createPinia())
+      const store = useFlameoutStore()
+      store.initializeGame({ houseEdgePercent: 3, startingBankroll: 1000, speedFactor: 1, gameMode: 'classic' })
+
+      setActivePinia(createPinia())
+      const reloaded = useFlameoutStore()
+      expect(reloaded.loadFromLocalStorage()).toBe(true)
+      expect(reloaded.phase).toBe('WAITING')
+      expect(reloaded.bankroll.balance).toBe(100_000)
+    })
+
     it('coerces non-numeric bankroll fields to safe defaults', () => {
       const payload = {
         version: 2,
@@ -163,6 +211,37 @@ describe('flameout store', () => {
       expect(store.bankroll.balance).toBe(0)
       expect(store.bankroll.totalWagered).toBe(0)
       expect(store.empiricalRTP).toBe(0)
+    })
+  })
+
+  describe('setup validation', () => {
+    it('clamps out-of-range setup values to safe bounds', () => {
+      setActivePinia(createPinia())
+      const store = useFlameoutStore()
+      store.initializeGame({
+        houseEdgePercent: -5,
+        startingBankroll: 0,
+        speedFactor: 99,
+        gameMode: 'nonsense' as GameMode
+      })
+      expect(store.settings.houseEdgePercent).toBe(0.5)
+      expect(store.settings.startingBankroll).toBe(100) // $1 floor, in cents
+      expect(store.settings.speedFactor).toBe(10)
+      expect(store.settings.gameMode).toBe('classic')
+    })
+
+    it('falls back to defaults for non-numeric setup values', () => {
+      setActivePinia(createPinia())
+      const store = useFlameoutStore()
+      store.initializeGame({
+        houseEdgePercent: Number.NaN,
+        startingBankroll: Number.NaN,
+        speedFactor: Number.NaN,
+        gameMode: 'classic'
+      })
+      expect(store.settings.houseEdgePercent).toBe(3)
+      expect(store.settings.startingBankroll).toBe(100_000) // $1,000 default
+      expect(store.settings.speedFactor).toBe(1)
     })
   })
 

@@ -53,6 +53,9 @@ export function useFlameoutEngine() {
 
     store.setPhase('RUNNING')
     store.beginRun()
+    // Persist the live round: a reload or closed tab resolves it from the
+    // wall clock instead of silently rolling the bet back.
+    store.saveToLocalStorage()
     lastTickPerf = performance.now()
     stopAnimation()
     tick()
@@ -77,23 +80,30 @@ export function useFlameoutEngine() {
 
     const elapsed = Date.now() - store.currentRound.startedAt
     const multiplier = currentMultiplier(elapsed, store.settings.speedFactor)
-    store.updateMultiplier(multiplier, elapsed)
 
-    // Crash is checked before auto-cashout: reaching the crash point and the
-    // target in the same frame is a loss, same as a real crash game.
-    if (multiplier >= store.currentRound.crashPoint && !store.jackpotSpinActive) {
-      crash()
+    // Auto-cashout resolves before the crash check so a large frame gap
+    // (background tab) can't turn a target that was reached first in game
+    // time into a loss — mirrors resumeFromInterruption. It pays exactly
+    // the target, not the frame's overshoot. A tie (target at or above the
+    // crash point) is still a loss, same as a real crash game.
+    const target = store.settings.autoCashoutTarget
+    if (
+      target
+      && !store.currentRound.cashedOut
+      && store.currentRound.betAmount > 0
+      && multiplier >= target
+      && target < store.currentRound.crashPoint
+      && !store.jackpotSpinActive
+    ) {
+      store.updateMultiplier(target, Math.round(timeToMultiplier(target, store.settings.speedFactor)))
+      cashOut(target)
       return
     }
 
-    if (
-      store.settings.autoCashoutTarget
-      && !store.currentRound.cashedOut
-      && multiplier >= store.settings.autoCashoutTarget
-      && store.currentRound.betAmount > 0
-      && !store.jackpotSpinActive
-    ) {
-      cashOut()
+    store.updateMultiplier(multiplier, elapsed)
+
+    if (multiplier >= store.currentRound.crashPoint && !store.jackpotSpinActive) {
+      crash()
       return
     }
 
@@ -109,6 +119,7 @@ export function useFlameoutEngine() {
     // Stop the round immediately — don't keep running to the crash
     stopAnimation()
     store.setPhase('CRASHED') // reuse CRASHED phase to show result
+    store.saveToLocalStorage() // the credited win survives a closed tab
     scheduleSettle()
 
     return true
