@@ -27,11 +27,11 @@ function confirmLeave() {
   router.push('/')
 }
 
-function navigateTo(path: string) {
+// Runs on nav-link click before NuxtLink routes — parks the live session
+function saveSession() {
   if (store.isPlaying) {
     store.saveToLocalStorage()
   }
-  router.push(path)
 }
 </script>
 
@@ -75,39 +75,42 @@ function navigateTo(path: string) {
     <!-- Bottom status bar -->
     <nav class="h-9 flex items-center justify-between px-3 bg-neutral-900 border-t border-neutral-800 shrink-0 z-50">
       <div class="flex items-center gap-4">
-        <button
+        <NuxtLink
+          to="/history"
           class="flex items-center gap-1.5 text-xs transition-colors"
           :class="route.path === '/history' ? 'text-amber-400' : 'text-neutral-500 hover:text-neutral-300'"
-          @click="navigateTo('/history')"
+          @click="saveSession"
         >
           <UIcon
             name="i-lucide-scroll-text"
             class="w-3.5 h-3.5"
           />
           <span>History</span>
-        </button>
-        <button
+        </NuxtLink>
+        <NuxtLink
+          to="/analysis"
           class="flex items-center gap-1.5 text-xs transition-colors"
           :class="route.path === '/analysis' ? 'text-amber-400' : 'text-neutral-500 hover:text-neutral-300'"
-          @click="navigateTo('/analysis')"
+          @click="saveSession"
         >
           <UIcon
             name="i-lucide-chart-no-axes-combined"
             class="w-3.5 h-3.5"
           />
           <span>Analysis</span>
-        </button>
-        <button
+        </NuxtLink>
+        <NuxtLink
+          to="/learn"
           class="flex items-center gap-1.5 text-xs transition-colors"
           :class="route.path === '/learn' ? 'text-amber-400' : 'text-neutral-500 hover:text-neutral-300'"
-          @click="navigateTo('/learn')"
+          @click="saveSession"
         >
           <UIcon
             name="i-lucide-book-open"
             class="w-3.5 h-3.5"
           />
           <span>Learn</span>
-        </button>
+        </NuxtLink>
       </div>
       <a
         href="https://github.com/cschweda/metaincognita-flameout"

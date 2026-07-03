@@ -1,6 +1,11 @@
 <script setup lang="ts">
 import { formatCents, formatMultiplier } from '~/types/flameout'
 
+useSeoMeta({
+  title: 'Round History | Flameout',
+  description: 'Every round of your Flameout session: crash points, bets, cashouts, and running balance.'
+})
+
 const store = useFlameoutStore()
 
 onMounted(() => {

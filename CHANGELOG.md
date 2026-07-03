@@ -2,6 +2,28 @@
 
 All notable changes to Flameout will be documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- **Social preview card**: `public/og.png` (source: `docs/og-card.html`, rendered at 1072×561) plus `og:`/`twitter:` meta — shared links now unfurl with a branded card instead of nothing
+- Per-page titles and descriptions for the History and Analysis pages
+
+### Changed
+
+- **Full static generation (`ssr: true`)**: every route is prerendered to real HTML at build time. Previously the deploy shipped an empty SPA shell — no `<title>`, no meta description, no content — so the entire Learn page was invisible without JavaScript. Now titles, meta, and all Learn content are in the HTML. The game page stays client-only via a route rule (`/game`: `ssr: false`), and the site remains a zero-server static deploy on Netlify
+- Bottom-nav items are real links (`NuxtLink`) instead of programmatic buttons — crawlable by the prerenderer and search engines, middle-clickable, and they still park the live session before navigating
+- Unknown URLs return a real 404 (`/404.html`) instead of soft-404ing to the home page with a 200
+
+### Fixed
+
+- **Auto-cashout now pays exactly the target multiplier.** Previously it paid whatever multiplier the triggering animation frame landed on — a small overshoot every time, and a large windfall if the tab had been in the background (target 2.00×, paid wherever the round was on return). It now matches `resumeFromInterruption`: paid at the target, to the cent
+- **Auto-cashout and crash resolve in game-time order.** A frame gap spanning both the target and the crash point (background tab) previously counted as a loss because the crash was checked first; now a target below the crash point wins regardless of frame timing. Ties (target at or above the crash point) still lose, same as a real crash game
+- **Jackpot spin economics settle at collection, not when the reels stop.** Leaving the game page mid-spin used to keep the deducted stake but forfeit a winning payout — the payout only applied when the canvas-local animation reached its result phase. Money now moves the moment the trigger is collected; the reel animation is pure presentation (the HUD and floating text still reveal the outcome only when the reels stop)
+- **In-flight rounds persist (storage v3), so closing the tab is never an undo.** The session is saved when a bet starts and when a cashout lands — including `currentRound` and the real phase — and a reload resolves the round from the wall clock via the existing resume machinery. Previously the last save was at the prior settle, so closing the tab within ~1.5s of a crash rolled the loss back, "Leave & Save" mid-round silently ate the bet, and browser-Back right after starting a game wiped the session (setup now saves immediately too)
+- **Custom setup inputs are clamped to their documented ranges** (house edge 0.5–10%, bankroll $1–$1M, speed 0.25–10×, known game modes). Typed values bypass HTML min/max, so a negative edge could silently produce a player-favorable game and a $0 bankroll started a session stuck at the betting screen. Strategy Lab inputs are clamped the same way (a cashout target below 1.01× "won" every round at a nonsense RTP)
+- **Holding Space no longer places a bet and instantly cashes out** — key repeat is ignored
+
 ## [0.4.1] - 2026-06-11
 
 ### Fixed

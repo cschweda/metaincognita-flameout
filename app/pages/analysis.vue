@@ -1,6 +1,11 @@
 <script setup lang="ts">
 import { formatCents } from '~/types/flameout'
 
+useSeoMeta({
+  title: 'Session Analysis & Strategy Lab | Flameout',
+  description: 'Mathematical breakdown of your crash-game session — empirical RTP, crash distribution vs theory, and a Strategy Lab that batch-simulates betting systems.'
+})
+
 const store = useFlameoutStore()
 const analytics = useFlameoutAnalytics()
 

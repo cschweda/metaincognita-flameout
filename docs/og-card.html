@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1072px; height: 561px; overflow: hidden; }
+  body {
+    position: relative;
+    font-family: -apple-system, "SF Pro Display", "Segoe UI", system-ui, sans-serif;
+    background:
+      radial-gradient(120% 90% at 18% 8%, #1c1030 0%, rgba(28,16,48,0) 55%),
+      radial-gradient(90% 70% at 85% 100%, #2a0f0a 0%, rgba(42,15,10,0) 60%),
+      linear-gradient(150deg, #0c0a16 0%, #08080e 60%, #0a0710 100%);
+    color: #e5e5e5;
+  }
+  .star { position: absolute; border-radius: 50%; background: #cdd6ff; }
+  .curve { position: absolute; inset: 0; }
+  .content {
+    position: absolute;
+    left: 84px; top: 96px;
+    max-width: 760px;
+  }
+  h1 {
+    font-size: 92px;
+    font-weight: 800;
+    letter-spacing: -2px;
+    line-height: 1;
+  }
+  h1 .flame { color: #fbbf24; }
+  h1 .rest { color: #d4d4d4; font-weight: 700; }
+  .tagline {
+    margin-top: 26px;
+    font-size: 30px;
+    line-height: 1.4;
+    color: #a3a3a3;
+    font-weight: 500;
+  }
+  .tagline b { color: #e5e5e5; font-weight: 600; }
+  .badges {
+    position: absolute;
+    left: 84px; bottom: 64px;
+    display: flex; gap: 12px; align-items: center;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 20px; font-weight: 700;
+  }
+  .badge { padding: 6px 16px; border-radius: 8px; }
+  .b1 { background: rgba(220,38,38,.75); color: #fecaca; }
+  .b2 { background: rgba(234,179,8,.35); color: #fde68a; }
+  .b3 { background: rgba(16,185,129,.35); color: #a7f3d0; }
+  .b4 { background: rgba(52,211,153,.5); color: #d1fae5; }
+  .note {
+    position: absolute;
+    right: 84px; bottom: 64px;
+    font-size: 20px;
+    color: #737373;
+    font-weight: 500;
+  }
+  .vignette {
+    position: absolute; inset: 0;
+    background: radial-gradient(85% 85% at 50% 50%, transparent 55%, rgba(0,0,0,.45) 100%);
+  }
+</style>
+</head>
+<body>
+  <svg class="curve" width="1072" height="561" viewBox="0 0 1072 561" fill="none">
+    <defs>
+      <linearGradient id="line" x1="0" y1="561" x2="1072" y2="0">
+        <stop offset="0" stop-color="#34d399"/>
+        <stop offset="0.3" stop-color="#eab308"/>
+        <stop offset="0.55" stop-color="#f97316"/>
+        <stop offset="0.8" stop-color="#ef4444"/>
+      </linearGradient>
+      <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+        <feGaussianBlur stdDeviation="10" result="b"/>
+        <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+    </defs>
+    <path d="M 0 545 C 380 535, 700 480, 870 330 C 960 245, 1010 140, 1040 60"
+          stroke="url(#line)" stroke-width="7" stroke-linecap="round"
+          filter="url(#glow)" opacity="0.95"/>
+    <path d="M 0 545 C 380 535, 700 480, 870 330 C 960 245, 1010 140, 1040 60"
+          stroke="url(#line)" stroke-width="22" stroke-linecap="round" opacity="0.12"/>
+    <g transform="translate(1040 60) rotate(-58)">
+      <path d="M 22 0 L 4 -7 L -12 -8 L -15 -5 L -15 5 L -12 8 L 4 7 Z" fill="#ef4444" filter="url(#glow)"/>
+      <path d="M -15 0 L -44 -8 L -50 0 L -44 8 Z" fill="#fbbf24" opacity="0.85"/>
+      <ellipse cx="10" cy="-1.5" rx="4.5" ry="3" fill="rgba(255,255,255,.75)"/>
+    </g>
+  </svg>
+
+  <div class="content">
+    <h1><span class="flame">Flameout</span> <span class="rest">Simulator</span></h1>
+    <p class="tagline">Watch the multiplier climb. Cash out before the crash.<br>
+    Then see <b>why the house always wins</b>.</p>
+  </div>
+
+  <div class="badges">
+    <span class="badge b1">1.00×</span>
+    <span class="badge b2">1.47×</span>
+    <span class="badge b3">2.31×</span>
+    <span class="badge b4">12.06×</span>
+  </div>
+  <div class="note">No real money. Just math.</div>
+  <div class="vignette"></div>
+
+  <script>
+    for (let i = 0; i < 90; i++) {
+      const s = document.createElement('div')
+      s.className = 'star'
+      const size = 0.6 + Math.random() * 2.2
+      s.style.width = s.style.height = size + 'px'
+      s.style.left = Math.random() * 1072 + 'px'
+      s.style.top = Math.random() * 561 + 'px'
+      s.style.opacity = 0.15 + Math.random() * 0.55
+      if (Math.random() < 0.16) s.style.background = '#fcd9a4'
+      document.body.insertBefore(s, document.body.firstChild.nextSibling)
+    }
+  </script>
+</body>
+</html>

@@ -6,7 +6,11 @@ export default defineNuxtConfig({
     '@pinia/nuxt'
   ],
 
-  ssr: false,
+  // Full static generation: every route is rendered to real HTML at build
+  // time (titles, meta, and the learn-page content are crawlable without
+  // JS). The game itself stays client-only via its route rule below —
+  // canvas, rAF loop, and localStorage session never run on the server.
+  ssr: true,
 
   devtools: {
     enabled: true
@@ -21,9 +25,19 @@ export default defineNuxtConfig({
 
   spaLoadingTemplate: true,
 
+  // The bottom nav navigates programmatically (to save the session first),
+  // so the prerender crawler can't discover every route from links — list
+  // them explicitly.
   routeRules: {
     '/': { prerender: true },
-    '/learn': { prerender: true }
+    '/learn': { prerender: true },
+    '/history': { prerender: true },
+    '/analysis': { prerender: true },
+    '/game': { ssr: false, prerender: true }
+  },
+
+  experimental: {
+    payloadExtraction: true
   },
 
   compatibilityDate: '2025-01-15',
