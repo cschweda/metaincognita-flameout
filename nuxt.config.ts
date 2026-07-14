@@ -57,13 +57,30 @@ export default defineNuxtConfig({
 
   // Bundle all icons used in source into the client build. Without this,
   // @nuxt/icon falls back to fetching icon data from api.iconify.design at
-  // runtime on static hosting — which the CSP (connect-src 'self') blocks.
-  // The explicit list covers icons referenced outside the scan globs
-  // (GAME_MODES in app/types/flameout.ts).
+  // runtime on static hosting — which the CSP (connect-src 'self') blocks,
+  // so the icon renders as nothing at all.
+  //
+  // `scan` reads only this app's own source: its globs are
+  // **/*.{vue,jsx,tsx,md,mdc,mdx,yml,yaml} and node_modules is excluded.
+  // Two kinds of icon are therefore invisible to it and must be listed here
+  // by hand, or they fail in production and nowhere else.
   icon: {
     clientBundle: {
       scan: true,
-      icons: ['lucide:flame', 'lucide:swords', 'lucide:diamond']
+      icons: [
+        // 1. Named in .ts, which the scan globs don't cover — GAME_MODES.
+        'lucide:flame',
+        'lucide:swords',
+        'lucide:diamond',
+
+        // 2. Nuxt UI's own defaults (app.config `ui.icons`), rendered from
+        // inside node_modules — never scanned, and they appear in none of
+        // our templates, which is exactly what makes them easy to miss.
+        // Every UModal's close button is `ui.icons.close`: How to Play,
+        // Leave Game?, and Start New Game? all shipped with an invisible ×.
+        'lucide:x', // ui.icons.close — UModal ×3, UToast
+        'lucide:loader-circle' // ui.icons.loading — UButton/UInput `loading`
+      ]
     }
   }
 })
