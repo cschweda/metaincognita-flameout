@@ -6,11 +6,13 @@ All notable changes to Flameout will be documented in this file.
 
 ### Added
 
+- **The hub exit** (`AppHubLink`): a gold `METAINCOGNITA` wordmark pinned to the far left of the top bar, on every route, linking out to `https://metaincognita.com` — the floor the whole suite hangs off. Flameout previously had no way home: once you were inside the simulator, the only way back to the other games was the browser's back button. It is a real `<a href>` (it leaves the SPA), opens in the same tab, is never gated or hidden, and — unlike the **Back** button beside it, which still confirms because it really does end a live round — it never confirms. It destroys nothing, and a player must always be able to get out. Suite chrome, so it stays gold in every app (guidelines §5)
 - **Social preview card**: `public/og.png` (source: `docs/og-card.html`, rendered at 1072×561) plus `og:`/`twitter:` meta — shared links now unfurl with a branded card instead of nothing
 - Per-page titles and descriptions for the History and Analysis pages
 
 ### Changed
 
+- The top bar's "Session active" label is `sr-only` below 640px so the hub exit always fits at 390px. The pulsing dot still carries it visually, and the text stays in the accessibility tree
 - **Full static generation (`ssr: true`)**: every route is prerendered to real HTML at build time. Previously the deploy shipped an empty SPA shell — no `<title>`, no meta description, no content — so the entire Learn page was invisible without JavaScript. Now titles, meta, and all Learn content are in the HTML. The game page stays client-only via a route rule (`/game`: `ssr: false`), and the site remains a zero-server static deploy on Netlify
 - Bottom-nav items are real links (`NuxtLink`) instead of programmatic buttons — crawlable by the prerenderer and search engines, middle-clickable, and they still park the live session before navigating
 - Unknown URLs return a real 404 (`/404.html`) instead of soft-404ing to the home page with a 200

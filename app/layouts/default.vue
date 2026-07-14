@@ -40,6 +40,15 @@ function saveSession() {
     <!-- Top status bar -->
     <nav class="h-9 flex items-center justify-between px-3 bg-neutral-900 border-b border-neutral-800 shrink-0 z-50">
       <div class="flex items-center gap-2">
+        <!-- Out of the simulator entirely, on every route including the index.
+             Not to be confused with "Back" beside it: that is this app's own
+             in-app leave and keeps its confirmation modal. The hub exit is the
+             door out of the suite, and it never confirms and never hides. -->
+        <AppHubLink />
+        <span
+          class="h-4 w-px bg-neutral-800"
+          aria-hidden="true"
+        />
         <button
           v-if="!isSetup"
           class="flex items-center gap-1 text-xs text-neutral-400 hover:text-neutral-200 transition-colors"
@@ -63,7 +72,11 @@ function saveSession() {
         class="flex items-center gap-1"
       >
         <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 motion-safe:animate-pulse" />
-        <span class="text-[10px] text-neutral-500">Session active</span>
+        <!-- Below 640px the bar has to give something up to fit the hub exit,
+             and the wordmark is worth more than this label. sr-only, not
+             hidden — the status stays in the accessibility tree, and the
+             pulsing dot still carries it visually. -->
+        <span class="text-[10px] text-neutral-500 max-sm:sr-only">Session active</span>
       </div>
     </nav>
 
