@@ -8,11 +8,15 @@ useSeoMeta({
 
 const store = useFlameoutStore()
 const analytics = useFlameoutAnalytics()
+const engine = useFlameoutEngine()
 
 onMounted(() => {
   if (!store.isPlaying) {
     store.loadFromLocalStorage()
   }
+  // A round may have crashed (or auto-cashed) while no loop was running —
+  // settle it so these numbers include its outcome. Never starts a new round.
+  engine.resolveInterrupted()
 })
 
 const stats = computed(() => analytics.sessionStats.value)
@@ -231,14 +235,24 @@ function formatPercent(n: number): string {
             </div>
           </div>
           <div class="rounded-lg bg-neutral-900/60 border border-neutral-800 p-4 text-center">
-            <div class="text-xs text-neutral-500 uppercase tracking-wider">
-              Instant Crashes
+            <div
+              class="text-xs text-neutral-500 uppercase tracking-wider"
+              title="Rounds the house-edge mechanism forced to crash at 1.00×"
+            >
+              Forced Instant
             </div>
             <div class="text-lg font-bold text-red-400 mt-1 font-mono">
               {{ formatPercent(analytics.instantCrashRate.value) }}
             </div>
           </div>
         </div>
+        <p class="text-[10px] text-neutral-600 leading-relaxed">
+          The average is a trap: this distribution is so heavy-tailed that its true mean is
+          infinite, so the sample average never settles — one 200× round can drag it for
+          hundreds of rounds. The median is the stable number. Forced instants converge to the
+          house edge ({{ store.settings.houseEdgePercent }}%); a few more rounds display 1.00×
+          because crashes in [1.00, 1.01) round down.
+        </p>
       </template>
 
       <!-- Strategy Lab — independent of the live session -->

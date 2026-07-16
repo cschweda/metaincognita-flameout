@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { formatCents, formatMultiplier } from '~/types/flameout'
+import { clampNumber } from '~/utils/flameout-math'
 
 const store = useFlameoutStore()
 const analytics = useFlameoutAnalytics()
@@ -12,10 +13,12 @@ function formatPercent(n: number): string {
 
 const activeTab = ref<'session' | 'probability'>('session')
 const probInput = ref(2)
+// A cleared or nonsense input must not compute P = 100% — clamp before math
+const probTarget = computed(() => clampNumber(probInput.value, 1.01, 1000, 2))
 const probResult = computed(() => {
-  const p = analytics.getProbability(probInput.value)
+  const p = analytics.getProbability(probTarget.value)
   const ev = analytics.getExpectedValue()
-  const breakEven = analytics.getBreakEvenRate(probInput.value)
+  const breakEven = analytics.getBreakEvenRate(probTarget.value)
   return { probability: p, ev, breakEven }
 })
 </script>
@@ -168,7 +171,7 @@ const probResult = computed(() => {
             <span class="font-mono text-amber-400">{{ analytics.medianCrashPoint.value.toFixed(2) }}×</span>
           </div>
           <div class="flex justify-between text-neutral-400">
-            <span>Instant (1.00×)</span>
+            <span title="Forced instant crashes — converges to the house edge">Instant (house edge)</span>
             <span class="font-mono text-red-400">{{ formatPercent(analytics.instantCrashRate.value) }}</span>
           </div>
         </div>
@@ -219,7 +222,7 @@ const probResult = computed(() => {
           <div class="space-y-2 text-sm">
             <div class="bg-neutral-900/60 rounded-lg p-3 space-y-2">
               <div class="flex justify-between text-neutral-400">
-                <span>P(reaching {{ probInput.toFixed(2) }}×)</span>
+                <span>P(reaching {{ probTarget.toFixed(2) }}×)</span>
                 <span class="font-mono text-amber-400 font-bold">
                   {{ (probResult.probability * 100).toFixed(2) }}%
                 </span>

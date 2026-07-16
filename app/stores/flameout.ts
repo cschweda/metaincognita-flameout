@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import type {
   GamePhase,
+  GameMode,
   GameSettings,
   BankrollState,
   RoundRecord,
@@ -60,6 +61,7 @@ function sanitizeRound(raw: unknown): CurrentRound | null {
   if (typeof startedAt !== 'number' || !Number.isFinite(startedAt) || startedAt <= 0) return null
   return {
     crashPoint,
+    instant: source.instant === true,
     currentMultiplier: Math.max(1, asFiniteNumber(source.currentMultiplier, 1)),
     betAmount: Math.max(0, asFiniteNumber(source.betAmount, 0)),
     startedAt,
@@ -68,6 +70,34 @@ function sanitizeRound(raw: unknown): CurrentRound | null {
     cashoutMultiplier: typeof cashoutMultiplier === 'number' && Number.isFinite(cashoutMultiplier)
       ? cashoutMultiplier
       : null
+  }
+}
+
+/**
+ * Coerce persisted settings into the documented ranges — the same clamps
+ * initializeGame applies, repeated at the load boundary so a hand-edited
+ * payload can't smuggle in a negative edge, an absurd speed, or an unknown
+ * game mode. (The bankroll and round get this treatment; settings should too.)
+ */
+function sanitizeSettings(raw: unknown): GameSettings {
+  const source = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
+  const defaults = DEFAULT_SETTINGS
+  const minBet = Math.round(clampNumber(source.minBet, 1, 1_000_000, defaults.minBet))
+  const autoCashoutTarget
+    = typeof source.autoCashoutTarget === 'number'
+      && Number.isFinite(source.autoCashoutTarget)
+      && source.autoCashoutTarget >= 1.01
+      ? source.autoCashoutTarget
+      : null
+  return {
+    houseEdgePercent: clampNumber(source.houseEdgePercent, 0.5, 10, defaults.houseEdgePercent),
+    startingBankroll: Math.round(clampNumber(source.startingBankroll, 100, 100_000_000, defaults.startingBankroll)),
+    minBet,
+    maxBet: Math.round(clampNumber(source.maxBet, minBet, 100_000_000, defaults.maxBet)),
+    speedFactor: clampNumber(source.speedFactor, 0.25, 10, defaults.speedFactor),
+    autoCashoutTarget,
+    autoBet: source.autoBet === true,
+    gameMode: GAME_MODES.some(m => m.id === source.gameMode) ? source.gameMode as GameMode : 'classic'
   }
 }
 
@@ -166,9 +196,10 @@ export const useFlameoutStore = defineStore('flameout', {
       this.phase = phase
     },
 
-    startRound(crashPoint: number) {
+    startRound(crashPoint: number, instant = false) {
       this.currentRound = {
         crashPoint,
+        instant,
         currentMultiplier: 1.00,
         betAmount: 0,
         startedAt: Date.now(),
@@ -193,15 +224,21 @@ export const useFlameoutStore = defineStore('flameout', {
       this.currentRound.startedAt += ms
     },
 
-    placeBet(amount: number) {
-      if (!this.currentRound) return
-      if (amount > this.bankroll.balance) return
-      if (amount < this.settings.minBet) return
-      if (amount > this.settings.maxBet) return
+    // Returns whether the bet was accepted — callers must not start the run
+    // on a rejected bet, or the round flies with nothing at stake.
+    placeBet(amount: number): boolean {
+      if (!this.currentRound) return false
+      // NaN slips through every comparison below (all false), which would
+      // poison the balance with NaN — reject it explicitly.
+      if (!Number.isFinite(amount)) return false
+      if (amount > this.bankroll.balance) return false
+      if (amount < this.settings.minBet) return false
+      if (amount > this.settings.maxBet) return false
 
       this.currentRound.betAmount = amount
       this.bankroll.balance -= amount
       this.bankroll.totalWagered += amount
+      return true
     },
 
     updateMultiplier(multiplier: number, elapsedMs: number) {
@@ -247,6 +284,7 @@ export const useFlameoutStore = defineStore('flameout', {
       const record: RoundRecord = {
         id: this.nextRoundId++,
         crashPoint: round.crashPoint,
+        instant: round.instant,
         bet: round.betAmount,
         cashoutMultiplier: round.cashoutMultiplier,
         payout,
@@ -308,6 +346,17 @@ export const useFlameoutStore = defineStore('flameout', {
       if (this.bankroll.balance > this.bankroll.peakBalance) {
         this.bankroll.peakBalance = this.bankroll.balance
       }
+      // Collections are occasional, so persist immediately — a reload
+      // mid-round must not roll collected items or spin results back.
+      this.saveToLocalStorage()
+    },
+
+    // End a jackpot spin: unfreeze round time and persist the shifted clock,
+    // so a reload after the spin resolves the round on the frozen timeline
+    // rather than one where the freeze never happened.
+    endJackpotSpin() {
+      this.jackpotSpinActive = false
+      this.saveToLocalStorage()
     },
 
     updateSettings(partial: Partial<GameSettings>) {
@@ -344,7 +393,7 @@ export const useFlameoutStore = defineStore('flameout', {
         const data = JSON.parse(raw)
         if (!data || typeof data !== 'object') return false
 
-        this.settings = { ...DEFAULT_SETTINGS, ...data.settings }
+        this.settings = sanitizeSettings(data.settings)
         this.bankroll = sanitizeBankroll(data.bankroll)
         this.roundHistory = Array.isArray(data.roundHistory)
           ? data.roundHistory.filter((r: unknown) =>

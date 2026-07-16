@@ -1,4 +1,6 @@
 <script setup lang="ts">
+const SEEN_KEY = 'flameout-how-to-play-seen'
+
 const show = ref(false)
 
 onMounted(() => {
@@ -6,7 +8,14 @@ onMounted(() => {
   const params = new URLSearchParams(window.location.search)
   if (params.has('demo')) return
 
-  const seen = localStorage.getItem('flameout-how-to-play-seen')
+  // localStorage can throw in strict privacy modes — treat that as unseen
+  // (the dismissal just won't persist), never as a crash on mount.
+  let seen: string | null = null
+  try {
+    seen = localStorage.getItem(SEEN_KEY)
+  } catch {
+    // unavailable — fall through to showing the tutorial
+  }
   if (!seen) {
     show.value = true
   }
@@ -14,7 +23,11 @@ onMounted(() => {
 
 function dismiss() {
   show.value = false
-  localStorage.setItem('flameout-how-to-play-seen', '1')
+  try {
+    localStorage.setItem(SEEN_KEY, '1')
+  } catch {
+    // localStorage may be full or unavailable
+  }
 }
 </script>
 

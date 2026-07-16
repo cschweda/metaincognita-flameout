@@ -9,7 +9,9 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest]
-        node: [22]
+        # Matches .nvmrc and netlify.toml — CI should validate the same Node
+        # major that builds the production deploy.
+        node: [20]
 
     steps:
       - name: Checkout

@@ -28,12 +28,14 @@ export function useFlameoutEngine() {
     store.setPhase('WAITING')
 
     // Pre-generate crash point
-    const crashPoint = generateCrashPoint(store.settings.houseEdgePercent)
-    store.startRound(crashPoint)
+    const { crashPoint, instant } = generateCrashPoint(store.settings.houseEdgePercent)
+    store.startRound(crashPoint, instant)
 
-    // Auto-place bet and start immediately if auto-bet is enabled
-    if (store.settings.autoBet && store.pendingBet <= store.bankroll.balance) {
-      store.placeBet(store.pendingBet)
+    // Auto-place bet and start immediately — but only if the bet is actually
+    // accepted. A rejected bet (cleared input, over max, over balance) must
+    // park at the betting screen, not launch a betless flight that auto-bet
+    // would then loop forever.
+    if (store.settings.autoBet && store.placeBet(store.pendingBet)) {
       startRunningPhase()
       return
     }
@@ -43,7 +45,8 @@ export function useFlameoutEngine() {
 
   function placeBetAndStart(amountCents: number) {
     if (store.phase !== 'WAITING') return false
-    store.placeBet(amountCents)
+    // A rejected bet must not start the round — nothing would be at stake.
+    if (!store.placeBet(amountCents)) return false
     startRunningPhase()
     return true
   }
@@ -84,15 +87,17 @@ export function useFlameoutEngine() {
     // Auto-cashout resolves before the crash check so a large frame gap
     // (background tab) can't turn a target that was reached first in game
     // time into a loss — mirrors resumeFromInterruption. It pays exactly
-    // the target, not the frame's overshoot. A tie (target at or above the
-    // crash point) is still a loss, same as a real crash game.
+    // the target, not the frame's overshoot. An exact tie (target equals the
+    // crash point) WINS: P(win at m) must equal P(crash >= m) = rtp/m, or the
+    // advertised RTP and the Strategy Lab's numbers quietly stop matching
+    // live play (tie-loses adds ~0.5pp of hidden edge at a 2× target).
     const target = store.settings.autoCashoutTarget
     if (
       target
       && !store.currentRound.cashedOut
       && store.currentRound.betAmount > 0
       && multiplier >= target
-      && target < store.currentRound.crashPoint
+      && target <= store.currentRound.crashPoint
       && !store.jackpotSpinActive
     ) {
       store.updateMultiplier(target, Math.round(timeToMultiplier(target, store.settings.speedFactor)))
@@ -143,7 +148,7 @@ export function useFlameoutEngine() {
     }, delayMs)
   }
 
-  function settle() {
+  function settle(startNext = true) {
     // The session may have been ended (New Game / Leave) while settling
     if (store.phase === 'SETUP' || store.phase === 'BUSTED') return
 
@@ -153,6 +158,14 @@ export function useFlameoutEngine() {
 
     // settleRound() may flip the phase to BUSTED (TS can't see the mutation)
     if ((store.phase as GamePhase) === 'BUSTED') return
+
+    if (!startNext) {
+      // Resolved from outside the game page: park at the betting screen
+      // without staging the next round — the game page stages one on mount.
+      store.setPhase('WAITING')
+      store.saveToLocalStorage()
+      return
+    }
 
     // Auto-start next round after brief pause
     if (nextRoundTimerId) clearTimeout(nextRoundTimerId)
@@ -197,7 +210,7 @@ export function useFlameoutEngine() {
     const target = store.settings.autoCashoutTarget
     const hasLiveBet = round.betAmount > 0 && !round.cashedOut
 
-    if (hasLiveBet && target && target < round.crashPoint && elapsed >= timeToMultiplier(target, speed)) {
+    if (hasLiveBet && target && target <= round.crashPoint && elapsed >= timeToMultiplier(target, speed)) {
       store.updateMultiplier(target, Math.round(timeToMultiplier(target, speed)))
       cashOut(target)
       return
@@ -211,6 +224,46 @@ export function useFlameoutEngine() {
     lastTickPerf = performance.now()
     stopAnimation()
     tick()
+  }
+
+  /**
+   * Resolve an interrupted session from OUTSIDE the game page — the History,
+   * Analysis, and setup pages call this on mount so their numbers include a
+   * round that crashed or auto-cashed while no loop was running. Unlike
+   * resumeFromInterruption it never resumes ticking and never starts the next
+   * round; a round that is genuinely still in flight is left alone.
+   */
+  function resolveInterrupted() {
+    store.jackpotSpinActive = false
+
+    if (store.phase === 'CRASHED' || store.phase === 'SETTLING') {
+      stopAnimation()
+      settle(false)
+      return
+    }
+
+    if (store.phase !== 'RUNNING' || !store.currentRound) return
+
+    const round = store.currentRound
+    const speed = store.settings.speedFactor
+    const elapsed = Date.now() - round.startedAt
+    const crashMs = timeToMultiplier(round.crashPoint, speed)
+    const target = store.settings.autoCashoutTarget
+    const hasLiveBet = round.betAmount > 0 && !round.cashedOut
+
+    if (hasLiveBet && target && target <= round.crashPoint && elapsed >= timeToMultiplier(target, speed)) {
+      store.updateMultiplier(target, Math.round(timeToMultiplier(target, speed)))
+      store.cashOut(target)
+      settle(false)
+      return
+    }
+
+    if (elapsed >= crashMs) {
+      store.updateMultiplier(round.crashPoint, Math.round(crashMs))
+      settle(false)
+    }
+
+    // Otherwise the round is still in flight — leave it for the game page.
   }
 
   function stopAnimation() {
@@ -244,6 +297,7 @@ export function useFlameoutEngine() {
     cashOut,
     rebuy,
     resumeFromInterruption,
+    resolveInterrupted,
     cleanup
   }
 }

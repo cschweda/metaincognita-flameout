@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { nextBet, runBatchSimulation } from './useFlameoutStrategy'
+import { nextBet, nextFibPosition, runBatchSimulation } from './useFlameoutStrategy'
 
 describe('nextBet', () => {
   it('flat: always returns base bet', () => {
@@ -29,6 +29,33 @@ describe('nextBet', () => {
     expect(nextBet(config, false, 200, 2, 0)).toBe(300)
     expect(nextBet(config, true, 300, 0, 1)).toBe(200)
     expect(nextBet(config, true, 100, 0, 1)).toBe(100) // floor at base
+  })
+
+  it('fibonacci: stakes follow the sequence at the given position', () => {
+    const config = { type: 'fibonacci' as const, baseBet: 100, cashoutTarget: 2 }
+    // The 4th argument is the Fibonacci position, maintained by the caller
+    // via nextFibPosition: positions 0,1,2,3,4 → stakes 1,1,2,3,5 × base.
+    expect(nextBet(config, null, 100, 0, 0)).toBe(100)
+    expect(nextBet(config, false, 100, 1, 0)).toBe(100)
+    expect(nextBet(config, false, 100, 2, 0)).toBe(200)
+    expect(nextBet(config, false, 200, 3, 0)).toBe(300)
+    expect(nextBet(config, false, 300, 4, 0)).toBe(500)
+    // Classic system: a win retreats two steps, it does NOT reset to base —
+    // from position 4 a win moves to position 2, which stakes 2× base.
+    expect(nextBet(config, true, 500, 2, 1)).toBe(200)
+  })
+
+  it('fibonacci: respects max bet cap', () => {
+    const config = { type: 'fibonacci' as const, baseBet: 100, cashoutTarget: 2, maxBet: 400 }
+    expect(nextBet(config, false, 300, 4, 0)).toBe(400) // 5× base capped
+  })
+
+  it('nextFibPosition: one step forward per loss, two back per win, floored at 0', () => {
+    expect(nextFibPosition(0, false)).toBe(1)
+    expect(nextFibPosition(4, false)).toBe(5)
+    expect(nextFibPosition(4, true)).toBe(2)
+    expect(nextFibPosition(1, true)).toBe(0)
+    expect(nextFibPosition(0, true)).toBe(0)
   })
 
   it('paroli: doubles after win up to 3, resets after loss', () => {

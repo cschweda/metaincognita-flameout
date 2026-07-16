@@ -91,6 +91,9 @@ const CHART_W = 600
 const CHART_H = 220
 const CHART_PAD = 8
 
+// Linear hides everything below a Martingale spike; log shows the grind.
+const logScale = ref(false)
+
 const chartMaxBalance = computed(() =>
   Math.max(1, ...runs.value.map(r => r.result.peakBalance)))
 
@@ -107,14 +110,21 @@ function curvePath(curve: number[]): string {
   return pts.join(' ')
 }
 
-function chartPoint(index: number, balance: number, maxLen: number): string {
-  const x = CHART_PAD + (index / (maxLen - 1)) * (CHART_W - CHART_PAD * 2)
-  const y = CHART_H - CHART_PAD - (balance / chartMaxBalance.value) * (CHART_H - CHART_PAD * 2)
-  return `${x.toFixed(1)},${y.toFixed(1)}`
+function yForBalance(balance: number): number {
+  const usable = CHART_H - CHART_PAD * 2
+  // Log scale floors at 1¢ so busts still reach the bottom of the chart
+  const frac = logScale.value
+    ? Math.log10(Math.max(balance, 1)) / Math.log10(Math.max(chartMaxBalance.value, 10))
+    : balance / chartMaxBalance.value
+  return CHART_H - CHART_PAD - frac * usable
 }
 
-const startBalanceY = computed(() =>
-  CHART_H - CHART_PAD - (dollarsToCents(bankrollDollars.value) / chartMaxBalance.value) * (CHART_H - CHART_PAD * 2))
+function chartPoint(index: number, balance: number, maxLen: number): string {
+  const x = CHART_PAD + (index / (maxLen - 1)) * (CHART_W - CHART_PAD * 2)
+  return `${x.toFixed(1)},${yForBalance(balance).toFixed(1)}`
+}
+
+const startBalanceY = computed(() => yForBalance(dollarsToCents(bankrollDollars.value)))
 
 function formatPercent(n: number): string {
   return `${(n * 100).toFixed(2)}%`
@@ -265,6 +275,7 @@ function formatRound(n: number | null): string {
             <button
               class="p-1 rounded border border-neutral-700 bg-neutral-800 text-neutral-400 hover:text-amber-400 hover:border-neutral-600 transition-colors"
               title="Randomize seed"
+              aria-label="Randomize seed"
               @click="randomizeSeed"
             >
               <UIcon
@@ -308,6 +319,22 @@ function formatRound(n: number | null): string {
             stroke-dasharray="4 4"
             stroke-width="1"
           />
+          <!-- y-axis anchors: chart top value, and the starting bankroll -->
+          <text
+            :x="CHART_PAD + 2"
+            y="12"
+            fill="rgba(255,255,255,0.35)"
+            font-size="9"
+            font-family="monospace"
+          >{{ formatCents(chartMaxBalance) }}</text>
+          <text
+            :x="CHART_W - CHART_PAD - 2"
+            :y="Math.max(12, startBalanceY - 4)"
+            text-anchor="end"
+            fill="rgba(255,255,255,0.3)"
+            font-size="9"
+            font-family="monospace"
+          >start {{ formatCents(dollarsToCents(bankrollDollars)) }}</text>
           <polyline
             v-for="run in runs"
             :key="run.type"
@@ -334,7 +361,18 @@ function formatRound(n: number | null): string {
               class="text-red-400 font-mono"
             >busted {{ formatRound(run.result.bustedAtRound) }}</span>
           </span>
-          <span class="text-neutral-600 ml-auto font-mono">
+          <button
+            class="ml-auto px-2 py-0.5 rounded text-[10px] border transition-all font-mono"
+            :class="logScale
+              ? 'bg-amber-500/10 border-amber-500/40 text-amber-400'
+              : 'bg-neutral-800 border-neutral-700 text-neutral-500 hover:text-neutral-300'"
+            :aria-pressed="logScale"
+            title="Log y-axis — see the grind under the Martingale spikes"
+            @click="logScale = !logScale"
+          >
+            log y
+          </button>
+          <span class="text-neutral-600 font-mono">
             dashed line = starting bankroll
           </span>
         </div>

@@ -67,6 +67,79 @@ describe('flameout store', () => {
       expect(store.bankroll.balance).toBe(0)
       expect(store.bankroll.sideGameNet).toBe(-300)
     })
+
+    it('persists side-game deltas the moment they apply', () => {
+      const store = freshStore()
+      store.startRound(2.0)
+      store.placeBet(100)
+      store.applySideGameDelta(700)
+
+      // A reload right now must not roll the collected item back
+      const saved = JSON.parse(localStorage.getItem('flameout-session')!)
+      expect(saved.bankroll.sideGameNet).toBe(700)
+      expect(saved.bankroll.balance).toBe(store.bankroll.balance)
+    })
+
+    it('endJackpotSpin clears the freeze flag and persists the shifted clock', () => {
+      const store = freshStore()
+      store.startRound(3.0)
+      store.placeBet(100)
+      store.setPhase('RUNNING')
+      store.saveToLocalStorage()
+
+      store.jackpotSpinActive = true
+      store.shiftRoundStart(2500)
+      store.endJackpotSpin()
+
+      expect(store.jackpotSpinActive).toBe(false)
+      const saved = JSON.parse(localStorage.getItem('flameout-session')!)
+      expect(saved.currentRound.startedAt).toBe(store.currentRound!.startedAt)
+    })
+  })
+
+  describe('bet validation', () => {
+    it('reports success from placeBet and rejects invalid bets without mutating state', () => {
+      const store = freshStore()
+      store.startRound(2.0)
+      const balance = store.bankroll.balance
+
+      expect(store.placeBet(0)).toBe(false) // below minBet
+      expect(store.placeBet(store.settings.maxBet + 1)).toBe(false)
+      expect(store.bankroll.balance).toBe(balance)
+      expect(store.currentRound!.betAmount).toBe(0)
+
+      expect(store.placeBet(1000)).toBe(true)
+      expect(store.bankroll.balance).toBe(balance - 1000)
+    })
+  })
+
+  describe('instant-crash flag', () => {
+    it('carries the instant flag from startRound into the round record', () => {
+      const store = freshStore()
+      store.startRound(1.0, true)
+      store.placeBet(100)
+      store.settleRound()
+      expect(store.roundHistory[0]!.instant).toBe(true)
+    })
+
+    it('records instant: false for ordinary rounds', () => {
+      const store = freshStore()
+      playRound(store, { cashoutAt: 1.5 })
+      expect(store.roundHistory[0]!.instant).toBe(false)
+    })
+
+    it('persists the flag on in-flight rounds', () => {
+      const store = freshStore()
+      store.startRound(1.0, true)
+      store.placeBet(100)
+      store.setPhase('RUNNING')
+      store.saveToLocalStorage()
+
+      setActivePinia(createPinia())
+      const reloaded = useFlameoutStore()
+      expect(reloaded.loadFromLocalStorage()).toBe(true)
+      expect(reloaded.currentRound!.instant).toBe(true)
+    })
   })
 
   describe('cashout guards', () => {
@@ -193,6 +266,39 @@ describe('flameout store', () => {
       expect(reloaded.loadFromLocalStorage()).toBe(true)
       expect(reloaded.phase).toBe('WAITING')
       expect(reloaded.bankroll.balance).toBe(100_000)
+    })
+
+    it('clamps hostile settings payloads to the documented ranges', () => {
+      const payload = {
+        version: 3,
+        settings: {
+          houseEdgePercent: -50,
+          startingBankroll: -5,
+          minBet: 'ten',
+          maxBet: 1e12,
+          speedFactor: 999,
+          autoCashoutTarget: 0.5,
+          autoBet: 'yes',
+          gameMode: 'bogus'
+        },
+        bankroll: {},
+        roundHistory: [],
+        pendingBet: 1000,
+        phase: 'WAITING'
+      }
+      localStorage.setItem('flameout-session', JSON.stringify(payload))
+
+      setActivePinia(createPinia())
+      const store = useFlameoutStore()
+      expect(store.loadFromLocalStorage()).toBe(true)
+      expect(store.settings.houseEdgePercent).toBe(0.5)
+      expect(store.settings.startingBankroll).toBe(100)
+      expect(store.settings.minBet).toBe(10)
+      expect(store.settings.maxBet).toBe(100_000_000)
+      expect(store.settings.speedFactor).toBe(10)
+      expect(store.settings.autoCashoutTarget).toBeNull()
+      expect(store.settings.autoBet).toBe(false)
+      expect(store.settings.gameMode).toBe('classic')
     })
 
     it('coerces non-numeric bankroll fields to safe defaults', () => {

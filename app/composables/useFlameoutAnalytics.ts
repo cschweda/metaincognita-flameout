@@ -101,11 +101,15 @@ export function useFlameoutAnalytics() {
   })
 
   /**
-   * Percentage of instant crashes (1.00×) in session.
+   * Percentage of forced instant crashes — the house-edge mechanism itself,
+   * which converges to the configured edge. Displayed 1.00× rounds run ~1pp
+   * higher (the floor absorbs [1.00, 1.01)); the distribution chart accounts
+   * for those separately. Legacy records predate the flag, so fall back to
+   * the displayed value for them.
    */
   const instantCrashRate = computed(() => {
     if (store.roundHistory.length === 0) return 0
-    const instant = store.roundHistory.filter(r => r.crashPoint === 1.00).length
+    const instant = store.roundHistory.filter(r => r.instant ?? (r.crashPoint === 1.00)).length
     return instant / store.roundHistory.length
   })
 

@@ -2,7 +2,10 @@
 @import "@nuxt/ui";
 
 @theme static {
-  --font-sans: 'Public Sans', sans-serif;
+  /* No webfont ships (local-only build, CSP connect-src 'self'), so name the
+     system stack explicitly instead of a 'Public Sans' that never loads and
+     silently falls back to the browser default. */
+  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 
   --color-green-50: #EFFDF5;
   --color-green-100: #D9FBE8;

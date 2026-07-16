@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { formatCents, formatMultiplier } from '~/types/flameout'
 import type { GameMode } from '~/types/flameout'
+import { isEditableTarget } from '~/utils/keyboard'
 
 const route = useRoute()
 const router = useRouter()
@@ -11,13 +12,12 @@ const engine = useFlameoutEngine()
 function handleKeydown(e: KeyboardEvent) {
   // Key repeat would place a bet and instantly cash out at ~1.00×
   if (e.repeat) return
-  const target = e.target as HTMLElement | null
-  if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable)) {
-    return
-  }
+  if (isEditableTarget(e.target)) return
   if (e.code === 'Space') {
     e.preventDefault()
-    if (store.phase === 'WAITING') {
+    // Same gate as the Place Bet button — an invalid bet must not reach the
+    // engine (placeBetAndStart also refuses, this just keeps them in sync)
+    if (store.phase === 'WAITING' && store.canPlaceBet) {
       engine.placeBetAndStart(store.pendingBet)
     } else if (store.canCashOut) {
       engine.cashOut()
@@ -153,6 +153,7 @@ const liveAnnouncement = computed(() => {
         <span class="text-neutral-500 text-xs">{{ store.settings.houseEdgePercent }}% edge</span>
         <button
           class="text-neutral-500 hover:text-neutral-300 transition-colors"
+          :aria-label="showSidebar ? 'Hide stats sidebar' : 'Show stats sidebar'"
           @click="showSidebar = !showSidebar"
         >
           <UIcon

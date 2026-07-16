@@ -24,11 +24,11 @@ import {
   rollReels,
   calcSlotPayout
 } from '~/utils/flameout-variants'
+import { isEditableTarget } from '~/utils/keyboard'
 
 const store = useFlameoutStore()
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 
-const DPR = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1
 const isGauntlet = computed(() => store.settings.gameMode === 'gauntlet')
 const isJackpot = computed(() => store.settings.gameMode === 'jackpot')
 const isVariantMode = computed(() => isGauntlet.value || isJackpot.value)
@@ -39,6 +39,9 @@ const isVariantMode = computed(() => isGauntlet.value || isJackpot.value)
 
 let cssW = 0
 let cssH = 0
+// Read fresh on every resize — dragging the window to a monitor with a
+// different pixel density must re-rasterize, not keep the old ratio.
+let dpr = 1
 let stars: Star[] = []
 let wisps: Wisp[] = []
 let particles: Particle[] = []
@@ -137,8 +140,12 @@ function resetVariantState() {
   activeSpin = null
 }
 
-function updatePlayerPosition() {
-  const moveSpeed = Math.max(3, cssH * 0.011)
+function updatePlayerPosition(dt: number) {
+  // Steering is per-millisecond, not per-frame — a 120Hz display must not
+  // steer twice as fast as a 60Hz one. dt is clamped so the first frame
+  // after a background tab can't teleport the jet.
+  const frames = Math.min(dt, 50) / 16.67
+  const moveSpeed = Math.max(3, cssH * 0.011) * frames
   if (keysDown.up) playerYOffset -= moveSpeed
   if (keysDown.down) playerYOffset += moveSpeed
   const limit = maxPlayerOffset()
@@ -154,7 +161,7 @@ function updateFloatingTexts(dt: number, rise: number) {
 }
 
 function updateGauntlet(currentMs: number, dt: number) {
-  updatePlayerPosition()
+  updatePlayerPosition(dt)
 
   if (currentMs - lastSpawnMs > gauntletSpawnInterval(currentMs)) {
     gauntletItems.push(makeGauntletItem(nextItemId++, currentMs))
@@ -171,7 +178,7 @@ function updateGauntlet(currentMs: number, dt: number) {
 }
 
 function updateJackpot(currentMs: number, dt: number) {
-  updatePlayerPosition()
+  updatePlayerPosition(dt)
 
   if (currentMs - lastSpawnMs > jackpotSpawnInterval(currentMs)) {
     jackpotTriggers.push(makeJackpotTrigger(nextItemId++, currentMs))
@@ -210,7 +217,9 @@ function updateJackpot(currentMs: number, dt: number) {
       }
     } else if (activeSpin.phase === 'result' && elapsed > 2500) {
       activeSpin = null
-      store.jackpotSpinActive = false
+      // Unfreezes round time AND persists the shifted clock, so a reload
+      // from here on resolves the round on the frozen timeline.
+      store.endJackpotSpin()
     }
   }
 
@@ -288,7 +297,7 @@ function draw() {
   const w = cssW
   const h = cssH
 
-  ctx.setTransform(DPR, 0, 0, DPR, 0, 0)
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
   ctx.clearRect(0, 0, w, h)
 
   if (shakeIntensity > 0.5) {
@@ -608,6 +617,7 @@ function draw() {
 
 let rafId: number | null = null
 let lastTime = 0
+let staticFrameDrawn = false
 
 function renderLoop(time: number = 0) {
   const dt = lastTime ? time - lastTime : 16
@@ -633,7 +643,20 @@ function renderLoop(time: number = 0) {
   }
 
   updateParticles(dt)
-  draw()
+
+  // Under reduced motion an idle scene (no round, no effects in flight) is
+  // pixel-identical frame to frame — draw it once and skip the rest instead
+  // of burning battery repainting a static image. Any state change that can
+  // alter the picture resets staticFrameDrawn.
+  const isStatic = reducedMotion
+    && store.phase !== 'RUNNING'
+    && particles.length === 0
+    && shakeIntensity === 0
+    && !activeSpin
+  if (!isStatic || !staticFrameDrawn) {
+    draw()
+    staticFrameDrawn = isStatic
+  }
 
   rafId = requestAnimationFrame(renderLoop)
 }
@@ -656,6 +679,7 @@ function backfillCurve() {
 }
 
 watch(() => store.phase, (phase) => {
+  staticFrameDrawn = false
   if (phase === 'RUNNING') {
     curvePoints = []
     particles = []
@@ -699,16 +723,21 @@ function syncCanvasSize() {
   if (rect.width === 0 || rect.height === 0) return
   cssW = rect.width
   cssH = rect.height
-  canvas.width = Math.max(1, Math.round(rect.width * DPR))
-  canvas.height = Math.max(1, Math.round(rect.height * DPR))
+  dpr = window.devicePixelRatio || 1
+  canvas.width = Math.max(1, Math.round(rect.width * dpr))
+  canvas.height = Math.max(1, Math.round(rect.height * dpr))
   stars = makeStars(cssW, cssH)
   wisps = makeWisps(cssW, cssH)
+  staticFrameDrawn = false
 }
 
 // ── Keyboard (variant steering only) ────────────────────────────────────────
 
 function handleKeyDown(e: KeyboardEvent) {
   if (!isVariantMode.value || store.phase !== 'RUNNING') return
+  // Never steer (or preventDefault) while the user is typing in a field —
+  // arrows inside a number input are its stepper, not flight controls.
+  if (isEditableTarget(e.target)) return
   if (e.code === 'ArrowUp' || e.code === 'KeyW') {
     keysDown.up = true
     e.preventDefault()
@@ -730,6 +759,7 @@ let motionQuery: MediaQueryList | null = null
 
 function onMotionPreferenceChange() {
   reducedMotion = motionQuery?.matches ?? false
+  staticFrameDrawn = false
 }
 
 // ── Lifecycle ───────────────────────────────────────────────────────────────

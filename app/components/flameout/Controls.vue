@@ -35,9 +35,18 @@ const autoCashoutInput = ref<number | null>(store.settings.autoCashoutTarget)
 
 watch(autoCashoutInput, (val) => {
   store.updateSettings({
-    autoCashoutTarget: val && val >= 1.01 ? val : null
+    autoCashoutTarget: typeof val === 'number' && Number.isFinite(val) && val >= 1.01 ? val : null
   })
 })
+
+// The auto-cashout field locks while a bet is at risk: the engine reads the
+// target every frame, so an edit mid-flight would fire on the partially
+// typed value — typing "2" on the way to "25" at 3.1× would instantly cash
+// out at 2.00×, below the on-screen multiplier.
+const betInFlight = computed(() =>
+  store.phase === 'RUNNING'
+  && (store.currentRound?.betAmount ?? 0) > 0
+  && !store.currentRound?.cashedOut)
 
 function toggleAutoBet() {
   store.updateSettings({ autoBet: !store.settings.autoBet })
@@ -156,17 +165,19 @@ function toggleAutoBet() {
 
         <span class="text-neutral-700">|</span>
 
-        <!-- Auto-cashout -->
+        <!-- Auto-cashout — commits on blur/Enter (lazy), locked mid-flight -->
         <div class="flex items-center gap-1">
           <span class="text-xs text-neutral-500">Auto-cashout:</span>
           <input
-            v-model.number="autoCashoutInput"
+            v-model.lazy.number="autoCashoutInput"
             type="number"
             :min="1.01"
             :max="10000"
             step="any"
             placeholder="off"
-            class="w-16 bg-neutral-800 border border-neutral-700 rounded px-2 py-1 text-sm text-neutral-200 font-mono text-right focus:border-amber-500 focus:outline-none"
+            :disabled="betInFlight"
+            :title="betInFlight ? 'Locked while a bet is in flight' : 'Cash out automatically at this multiplier'"
+            class="w-16 bg-neutral-800 border border-neutral-700 rounded px-2 py-1 text-sm text-neutral-200 font-mono text-right focus:border-amber-500 focus:outline-none disabled:opacity-50"
           >
           <span class="text-xs text-neutral-500">×</span>
         </div>

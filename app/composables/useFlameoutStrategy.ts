@@ -4,12 +4,16 @@ import { createRng } from '~/utils/flameout-rng'
 
 /**
  * Calculate the next bet for a given strategy and history.
+ *
+ * `fibPosition` is the Fibonacci system's position in the sequence — the
+ * caller maintains it across rounds with nextFibPosition(). Other strategies
+ * ignore it.
  */
 export function nextBet(
   strategy: StrategyConfig,
   previousWon: boolean | null,
   currentBet: number,
-  consecutiveLosses: number,
+  fibPosition: number,
   consecutiveWins: number
 ): number {
   const cap = strategy.maxBet || Infinity
@@ -28,9 +32,10 @@ export function nextBet(
       return Math.min(currentBet + strategy.baseBet, cap)
 
     case 'fibonacci': {
-      if (previousWon === null || previousWon) return strategy.baseBet
-      // Generate Fibonacci sequence position based on consecutive losses
-      const fib = fibonacci(consecutiveLosses + 1)
+      // Classic system: the stake is the Fibonacci number at the current
+      // position (1, 1, 2, 3, 5, …) — a win retreats two positions rather
+      // than resetting, see nextFibPosition().
+      const fib = fibonacci(fibPosition + 1)
       return Math.min(fib * strategy.baseBet, cap)
     }
 
@@ -42,6 +47,14 @@ export function nextBet(
     default:
       return strategy.baseBet
   }
+}
+
+/**
+ * Advance the Fibonacci system's sequence position: one step forward on a
+ * loss, two steps back on a win (never below the start).
+ */
+export function nextFibPosition(position: number, won: boolean): number {
+  return won ? Math.max(0, position - 2) : position + 1
 }
 
 function fibonacci(n: number): number {
@@ -68,7 +81,7 @@ export function runBatchSimulation(config: BatchSimConfig): BatchSimResult {
   let roundsLost = 0
   let busted = false
   let bustedAtRound: number | null = null
-  let consecutiveLosses = 0
+  let fibPosition = 0
   let consecutiveWins = 0
   let previousWon: boolean | null = null
   let currentBet = config.strategy.baseBet
@@ -78,7 +91,7 @@ export function runBatchSimulation(config: BatchSimConfig): BatchSimResult {
   let roundsPlayed = 0
   for (let i = 0; i < config.rounds; i++) {
     // Calculate bet
-    currentBet = nextBet(config.strategy, previousWon, currentBet, consecutiveLosses, consecutiveWins)
+    currentBet = nextBet(config.strategy, previousWon, currentBet, fibPosition, consecutiveWins)
 
     // Can't bet more than balance
     if (currentBet > balance) currentBet = balance
@@ -88,12 +101,14 @@ export function runBatchSimulation(config: BatchSimConfig): BatchSimResult {
       break
     }
 
-    const crashPoint = generateCrashPoint(config.houseEdgePercent, random)
+    const { crashPoint } = generateCrashPoint(config.houseEdgePercent, random)
 
     balance -= currentBet
     totalWagered += currentBet
     roundsPlayed++
 
+    // A tie is a win — same rule as the live engine, so both converge to
+    // P(win) = rtp/m and the Lab's numbers stay comparable to live play.
     const won = crashPoint >= config.strategy.cashoutTarget
     if (won) {
       const payout = calculatePayoutCents(currentBet, config.strategy.cashoutTarget)
@@ -101,13 +116,12 @@ export function runBatchSimulation(config: BatchSimConfig): BatchSimResult {
       totalReturned += payout
       roundsWon++
       consecutiveWins++
-      consecutiveLosses = 0
     } else {
       roundsLost++
-      consecutiveLosses++
       consecutiveWins = 0
     }
 
+    fibPosition = nextFibPosition(fibPosition, won)
     previousWon = won
 
     if (balance > peakBalance) peakBalance = balance
@@ -144,7 +158,7 @@ export const STRATEGY_OPTIONS: { value: StrategyType, label: string, description
   { value: 'flat', label: 'Flat', description: 'Same bet every round' },
   { value: 'martingale', label: 'Martingale', description: 'Double after loss, reset after win' },
   { value: 'dalembert', label: 'D\'Alembert', description: 'Increase by base after loss, decrease after win' },
-  { value: 'fibonacci', label: 'Fibonacci', description: 'Follow Fibonacci sequence on losses' },
+  { value: 'fibonacci', label: 'Fibonacci', description: 'Advance the sequence on a loss, step back two on a win' },
   { value: 'paroli', label: 'Paroli', description: 'Double after win (up to 3), reset after loss' }
 ]
 

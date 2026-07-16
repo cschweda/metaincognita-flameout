@@ -16,22 +16,57 @@ import { mulberry32 } from './flameout-rng'
 describe('generateCrashPoint', () => {
   it('produces crash points >= 1.00', () => {
     for (let i = 0; i < 1000; i++) {
-      expect(generateCrashPoint(3)).toBeGreaterThanOrEqual(1.00)
+      expect(generateCrashPoint(3).crashPoint).toBeGreaterThanOrEqual(1.00)
     }
   })
 
-  it('instant crash rate approximates house edge over many rounds', () => {
+  it('flags forced instant crashes at exactly the house-edge rate', () => {
     const houseEdge = 3
     const rounds = 100_000
     const rng = mulberry32(42)
-    let instantCrashes = 0
+    let forced = 0
 
     for (let i = 0; i < rounds; i++) {
-      if (generateCrashPoint(houseEdge, rng) === 1.00) instantCrashes++
+      if (generateCrashPoint(houseEdge, rng).instant) forced++
     }
 
-    const rate = instantCrashes / rounds
-    expect(rate).toBeCloseTo(houseEdge / 100, 1) // within ±0.05
+    // The instant flag measures the house-edge mechanism itself, so it
+    // converges to the edge — unlike the displayed 1.00× rate below.
+    expect(forced / rounds).toBeCloseTo(houseEdge / 100, 2)
+  })
+
+  it('displays 1.00× at the floored-distribution rate, not the house edge', () => {
+    const houseEdge = 3
+    const rtp = 1 - houseEdge / 100
+    const rounds = 100_000
+    const rng = mulberry32(42)
+    let displayed = 0
+
+    for (let i = 0; i < rounds; i++) {
+      if (generateCrashPoint(houseEdge, rng).crashPoint === 1.00) displayed++
+    }
+
+    // Forced instants (3%) plus organic crashes in [1.00, 1.01) that the
+    // two-decimal floor rounds down — ~3.96% at a 3% edge.
+    expect(displayed / rounds).toBeCloseTo(1 - rtp / 1.01, 2)
+  })
+
+  it('always displays 1.00× when the instant flag is set', () => {
+    const rng = mulberry32(7)
+    for (let i = 0; i < 10_000; i++) {
+      const { crashPoint, instant } = generateCrashPoint(3, rng)
+      if (instant) expect(crashPoint).toBe(1.00)
+    }
+  })
+
+  it('also displays 1.00× on some non-forced rounds (the floor absorbs [1.00, 1.01))', () => {
+    const rng = mulberry32(11)
+    let organic = 0
+    for (let i = 0; i < 100_000; i++) {
+      const { crashPoint, instant } = generateCrashPoint(3, rng)
+      if (!instant && crashPoint === 1.00) organic++
+    }
+    expect(organic).toBeGreaterThan(0)
   })
 
   it('percentage reaching 2.00x approximates RTP/2', () => {
@@ -42,7 +77,7 @@ describe('generateCrashPoint', () => {
     let reached = 0
 
     for (let i = 0; i < rounds; i++) {
-      if (generateCrashPoint(houseEdge, rng) >= 2.00) reached++
+      if (generateCrashPoint(houseEdge, rng).crashPoint >= 2.00) reached++
     }
 
     const rate = reached / rounds
@@ -57,7 +92,7 @@ describe('generateCrashPoint', () => {
     let reached = 0
 
     for (let i = 0; i < rounds; i++) {
-      if (generateCrashPoint(houseEdge, rng) >= 10.00) reached++
+      if (generateCrashPoint(houseEdge, rng).crashPoint >= 10.00) reached++
     }
 
     const rate = reached / rounds
@@ -73,8 +108,8 @@ describe('generateCrashPoint', () => {
     let returned = 0
     const rng2 = mulberry32(999)
     for (let i = 0; i < rounds; i++) {
-      const cp = generateCrashPoint(houseEdge, rng2)
-      if (cp >= 2.00) returned += 2.00
+      const { crashPoint } = generateCrashPoint(houseEdge, rng2)
+      if (crashPoint >= 2.00) returned += 2.00
       // else returned += 0
     }
     const empiricalRTP = returned / rounds
@@ -86,7 +121,7 @@ describe('generateCrashPoint', () => {
     const rng2 = mulberry32(42)
 
     for (let i = 0; i < 100; i++) {
-      expect(generateCrashPoint(3, rng1)).toBe(generateCrashPoint(3, rng2))
+      expect(generateCrashPoint(3, rng1)).toEqual(generateCrashPoint(3, rng2))
     }
   })
 })
@@ -182,11 +217,13 @@ describe('breakEvenRate', () => {
 })
 
 describe('binProbability', () => {
-  it('instant crash bin equals house edge', () => {
-    expect(binProbability(1.00, 1.00, 3)).toBeCloseTo(0.03, 4)
+  it('1.00× bin matches the displayed rate: house edge plus the floored [1.00, 1.01) mass', () => {
+    // P(display = 1.00) = 1 - rtp/1.01 ≈ 3.96% at a 3% edge, NOT 3%: the
+    // two-decimal floor rounds organic crashes in [1.00, 1.01) down to 1.00.
+    expect(binProbability(1.00, 1.00, 3)).toBeCloseTo(1 - 0.97 / 1.01, 10)
   })
 
-  it('all bins sum to ~1 (within rounding tolerance)', () => {
+  it('all bins sum to exactly 1 (the distribution telescopes)', () => {
     const bins = [
       [1.00, 1.00],
       [1.01, 1.20],
@@ -199,9 +236,7 @@ describe('binProbability', () => {
       [50.00, Infinity]
     ]
     const total = bins.reduce((s, [min, max]) => s + binProbability(min!, max!, 3), 0)
-    // Small gap between 1.00 and 1.01 is expected due to crash point flooring
-    expect(total).toBeGreaterThan(0.98)
-    expect(total).toBeLessThanOrEqual(1.0)
+    expect(total).toBeCloseTo(1.0, 10)
   })
 })
 

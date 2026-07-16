@@ -26,7 +26,9 @@ function outcomeIcon(round: RoundRecord): string {
 function tooltipText(round: RoundRecord): string {
   const lines = [`Round #${round.id} — Crashed at ${formatMultiplier(round.crashPoint)}`]
 
-  if (round.crashPoint === 1.00) {
+  // The flag marks forced instants; legacy records predate it, so fall back
+  // to the displayed value for them.
+  if (round.instant ?? (round.crashPoint === 1.00)) {
     lines.push('Instant crash (house edge)')
   } else {
     lines.push(`A $10 bet here → $${(10 * round.crashPoint).toFixed(2)} max return`)

@@ -144,6 +144,10 @@ export interface BankrollState {
 export interface RoundRecord {
   id: number
   crashPoint: number
+  // House-edge mechanism flag: true only for forced instant crashes. Distinct
+  // from crashPoint === 1.00 (the floor also rounds [1.00, 1.01) down to
+  // 1.00×). Optional because records persisted before the flag existed lack it.
+  instant?: boolean
   bet: number // cents
   cashoutMultiplier: number | null // null = did not cash out
   payout: number // cents
@@ -180,6 +184,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
 
 export interface CurrentRound {
   crashPoint: number // pre-determined at round start
+  instant: boolean // true when the house edge forced this crash (see RoundRecord)
   currentMultiplier: number
   betAmount: number // cents, 0 if no bet placed
   startedAt: number // timestamp

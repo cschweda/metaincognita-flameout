@@ -4,6 +4,7 @@ import type { GameMode } from '~/types/flameout'
 
 const router = useRouter()
 const store = useFlameoutStore()
+const engine = useFlameoutEngine()
 
 const gameMode = ref<GameMode>('classic')
 const houseEdge = ref(3)
@@ -26,15 +27,31 @@ const speedPresets = [
 const bankrollPresets = [100, 500, 1000, 5000, 10000]
 
 const hasResumableSession = ref(false)
+const showStartConfirm = ref(false)
 
 onMounted(() => {
   hasResumableSession.value = store.loadFromLocalStorage() && store.phase !== 'SETUP'
   if (!hasResumableSession.value) {
     store.clearSession()
+    return
   }
+  // A round may have crashed while the app was closed — settle it so the
+  // resume banner's numbers are current (never starts the next round).
+  engine.resolveInterrupted()
 })
 
 function startGame() {
+  // Starting fresh destroys the saved session — get the same confirmation
+  // the in-game New Game button asks for.
+  if (hasResumableSession.value) {
+    showStartConfirm.value = true
+    return
+  }
+  beginNewSession()
+}
+
+function beginNewSession() {
+  showStartConfirm.value = false
   store.initializeGame({
     houseEdgePercent: houseEdge.value,
     startingBankroll: startingBankroll.value,
@@ -222,6 +239,30 @@ function resumeGame() {
           Start Game
         </button>
       </div>
+
+      <!-- Overwrite confirmation — starting fresh destroys the saved session -->
+      <UModal
+        v-model:open="showStartConfirm"
+        title="Start a new game?"
+        :description="`This replaces your saved session (${store.bankroll.roundsPlayed} rounds played). Use Resume to continue it instead.`"
+      >
+        <template #body>
+          <div class="flex justify-end gap-2">
+            <UButton
+              color="neutral"
+              variant="outline"
+              label="Cancel"
+              @click="showStartConfirm = false"
+            />
+            <UButton
+              color="error"
+              label="Start New Game"
+              icon="i-lucide-flame"
+              @click="beginNewSession"
+            />
+          </div>
+        </template>
+      </UModal>
 
       <!-- Footer -->
       <div class="text-center space-y-2">

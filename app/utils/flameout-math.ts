@@ -1,5 +1,17 @@
 import type { RandomFn } from './flameout-rng'
 
+export interface CrashOutcome {
+  crashPoint: number
+  /**
+   * True when the house-edge mechanism forced this crash (R < houseEdge).
+   * Distinct from `crashPoint === 1.00`: the two-decimal floor also rounds
+   * organic crashes in [1.00, 1.01) down to a displayed 1.00×, so the
+   * displayed rate runs ~1pp above the edge. The flag is what converges to
+   * the house edge; the display converges to 1 − rtp/1.01.
+   */
+  instant: boolean
+}
+
 /**
  * Generate a crash point from the inverse distribution.
  *
@@ -8,15 +20,15 @@ import type { RandomFn } from './flameout-rng'
  * When R < (1 - rtp), instant crash at 1.00×.
  * Otherwise: crashPoint = floor(100 × rtp / (1 - R)) / 100
  */
-export function generateCrashPoint(houseEdgePercent: number, random: RandomFn = Math.random): number {
+export function generateCrashPoint(houseEdgePercent: number, random: RandomFn = Math.random): CrashOutcome {
   const rtp = 1 - houseEdgePercent / 100
   const R = random()
 
   // Instant crash — frequency equals house edge
-  if (R < (1 - rtp)) return 1.00
+  if (R < (1 - rtp)) return { crashPoint: 1.00, instant: true }
 
   const crashPoint = Math.floor((100 * rtp) / (1 - R)) / 100
-  return Math.max(1.00, crashPoint)
+  return { crashPoint: Math.max(1.00, crashPoint), instant: false }
 }
 
 /**
@@ -107,13 +119,18 @@ export const DISTRIBUTION_BINS = [
 ] as const
 
 /**
- * Theoretical probability of crash point falling in a bin.
+ * Theoretical probability of a *displayed* crash point falling in a bin.
  * P(min <= crash < max) = rtp/min - rtp/max
+ *
+ * The 1.00× bin is the forced instants (house edge) PLUS the organic mass in
+ * [1.00, 1.01) that the two-decimal floor rounds down: 1 − rtp/1.01. Using
+ * the bare house edge here would leave the observed bar permanently ~1pp
+ * above its marker — the opposite of the convergence lesson the chart teaches.
  */
 export function binProbability(min: number, max: number, houseEdgePercent: number): number {
   const rtp = 1 - houseEdgePercent / 100
   if (min === 1.00 && max === 1.00) {
-    return houseEdgePercent / 100
+    return 1 - rtp / 1.01
   }
   const pMin = max === Infinity ? 0 : rtp / max
   return (rtp / min) - pMin

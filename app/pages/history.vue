@@ -7,11 +7,15 @@ useSeoMeta({
 })
 
 const store = useFlameoutStore()
+const engine = useFlameoutEngine()
 
 onMounted(() => {
   if (!store.isPlaying) {
     store.loadFromLocalStorage()
   }
+  // A round may have crashed (or auto-cashed) while no loop was running —
+  // settle it so the table includes its outcome. Never starts a new round.
+  engine.resolveInterrupted()
 })
 
 const reversedHistory = computed(() => [...store.roundHistory].reverse())

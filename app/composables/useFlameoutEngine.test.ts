@@ -66,8 +66,22 @@ describe('useFlameoutEngine', () => {
       expect(store.currentRound!.cashoutMultiplier).toBe(2)
     })
 
-    it('still loses when the target sits at or above the crash point', () => {
+    it('wins an exact tie (target equals the crash point), like the Strategy Lab', () => {
+      // P(win at target m) must be P(crash >= m) = rtp/m for the advertised
+      // math to hold — a tie-loses rule quietly adds ~0.5pp of extra edge.
       store.updateSettings({ autoCashoutTarget: 3 })
+      startRoundWithBet(3)
+
+      vi.setSystemTime(Date.now() + elapsedFor(3.2))
+      vi.advanceTimersByTime(16) // fire the single pending frame
+
+      expect(store.currentRound!.cashedOut).toBe(true)
+      expect(store.currentRound!.cashoutMultiplier).toBe(3)
+      expect(store.bankroll.totalReturned).toBe(3000)
+    })
+
+    it('still loses when the target sits above the crash point', () => {
+      store.updateSettings({ autoCashoutTarget: 3.5 })
       startRoundWithBet(3)
 
       vi.setSystemTime(Date.now() + elapsedFor(4.8))
@@ -76,6 +90,117 @@ describe('useFlameoutEngine', () => {
       expect(store.currentRound!.cashedOut).toBe(false)
       expect(store.phase).toBe('CRASHED')
       expect(store.currentRound!.currentMultiplier).toBe(3)
+    })
+  })
+
+  describe('bet gating', () => {
+    it('refuses to start the run when the bet is rejected', () => {
+      store.startRound(2.0)
+      const balance = store.bankroll.balance
+
+      // 0 is below minBet — placeBet rejects it, so no round may start
+      expect(engine.placeBetAndStart(0)).toBe(false)
+      expect(store.phase).toBe('WAITING')
+      expect(store.currentRound!.betAmount).toBe(0)
+      expect(store.bankroll.balance).toBe(balance)
+    })
+
+    it('auto-bet stays at the betting screen when the pending bet is invalid', () => {
+      store.updateSettings({ autoBet: true })
+      store.pendingBet = 0 // e.g. the bet input was cleared
+
+      engine.startBettingPhase()
+
+      // No ghost round: the phase parks at WAITING instead of launching a
+      // betless flight (which auto-bet would then loop forever).
+      expect(store.phase).toBe('WAITING')
+      expect(store.currentRound!.betAmount).toBe(0)
+    })
+  })
+
+  describe('resolveInterrupted', () => {
+    it('settles an overdue crash without starting the next round', () => {
+      startRoundWithBet(1.5, 1000)
+      const balanceAfterBet = store.bankroll.balance
+      engine.cleanup()
+
+      setActivePinia(createPinia())
+      const reloaded = useFlameoutStore()
+      expect(reloaded.loadFromLocalStorage()).toBe(true)
+
+      vi.setSystemTime(Date.now() + elapsedFor(1.5) + 5000)
+      const resumedEngine = useFlameoutEngine()
+      resumedEngine.resolveInterrupted()
+
+      // Settled immediately — no timers, no next round staged
+      expect(reloaded.roundHistory.length).toBe(1)
+      expect(reloaded.roundHistory[0]!.profit).toBe(-1000)
+      expect(reloaded.bankroll.balance).toBe(balanceAfterBet)
+      expect(reloaded.phase).toBe('WAITING')
+      expect(reloaded.currentRound).toBeNull()
+
+      vi.advanceTimersByTime(5000)
+      expect(reloaded.currentRound).toBeNull() // still nothing auto-started
+      expect(reloaded.phase).toBe('WAITING')
+    })
+
+    it('applies an overdue auto-cashout win without starting the next round', () => {
+      store.updateSettings({ autoCashoutTarget: 2 })
+      startRoundWithBet(10, 1000)
+      engine.cleanup()
+
+      setActivePinia(createPinia())
+      const reloaded = useFlameoutStore()
+      expect(reloaded.loadFromLocalStorage()).toBe(true)
+
+      vi.setSystemTime(Date.now() + elapsedFor(3))
+      const resumedEngine = useFlameoutEngine()
+      resumedEngine.resolveInterrupted()
+
+      expect(reloaded.roundHistory.length).toBe(1)
+      expect(reloaded.roundHistory[0]!.cashoutMultiplier).toBe(2)
+      expect(reloaded.roundHistory[0]!.payout).toBe(2000)
+      expect(reloaded.phase).toBe('WAITING')
+
+      vi.advanceTimersByTime(5000)
+      expect(reloaded.currentRound).toBeNull()
+    })
+
+    it('leaves a genuinely live round untouched', () => {
+      startRoundWithBet(100, 1000) // crash far in the future
+      engine.cleanup()
+
+      setActivePinia(createPinia())
+      const reloaded = useFlameoutStore()
+      expect(reloaded.loadFromLocalStorage()).toBe(true)
+
+      vi.setSystemTime(Date.now() + elapsedFor(1.5))
+      const resumedEngine = useFlameoutEngine()
+      resumedEngine.resolveInterrupted()
+
+      expect(reloaded.phase).toBe('RUNNING')
+      expect(reloaded.roundHistory.length).toBe(0)
+      expect(reloaded.currentRound!.cashedOut).toBe(false)
+    })
+
+    it('finishes a round interrupted during the result pause', () => {
+      startRoundWithBet(10)
+      vi.setSystemTime(Date.now() + elapsedFor(1.5))
+      vi.advanceTimersByTime(16)
+      engine.cashOut() // phase CRASHED, settle timer pending
+      engine.cleanup() // …and killed
+
+      setActivePinia(createPinia())
+      const reloaded = useFlameoutStore()
+      expect(reloaded.loadFromLocalStorage()).toBe(true)
+      expect(reloaded.phase).toBe('CRASHED')
+
+      const resumedEngine = useFlameoutEngine()
+      resumedEngine.resolveInterrupted()
+
+      expect(reloaded.roundHistory.length).toBe(1)
+      expect(reloaded.phase).toBe('WAITING')
+      expect(reloaded.currentRound).toBeNull()
     })
   })
 
