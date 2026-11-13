@@ -144,10 +144,12 @@ function formatPercent(n: number): string {
               v-if="store.settings.gameMode !== 'classic'"
               class="text-[10px] text-neutral-600 leading-relaxed"
             >
-              The variant side game (items / spins) is balanced to zero expected value and
-              tracked separately, so it never contaminates the crash-game RTP above. Real
-              casino bonus features are never this generous — their "extras" are priced
-              into the house edge.
+              The variant side game is tracked separately, so it never contaminates the
+              crash-game RTP above. A Jackpot spin returns exactly its stake on average.
+              Gauntlet items average out to zero only if you fly blind — steer well and
+              the side game pays, which is why it is kept out of the RTP. Real casino
+              bonus features are never this generous: their "extras" are priced into the
+              house edge.
             </p>
           </div>
 

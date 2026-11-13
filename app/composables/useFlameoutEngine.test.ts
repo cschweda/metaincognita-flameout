@@ -93,6 +93,43 @@ describe('useFlameoutEngine', () => {
     })
   })
 
+  describe('manual cashout', () => {
+    it('cannot cash out a round that already crashed while no frame ran', () => {
+      startRoundWithBet(1.5, 1000)
+      const balanceAfterBet = store.bankroll.balance
+
+      // Frames stop (hidden / occluded tab) but the clock keeps going: the
+      // display still says ~1.00× long after the 1.5× crash point passed.
+      vi.setSystemTime(Date.now() + elapsedFor(1.5) + 3000)
+
+      expect(engine.cashOut()).toBe(false)
+      expect(store.currentRound!.cashedOut).toBe(false)
+      expect(store.phase).toBe('CRASHED')
+      expect(store.bankroll.balance).toBe(balanceAfterBet)
+      expect(store.bankroll.totalReturned).toBe(0)
+    })
+
+    it('pays the clock, not the stale frame, when the round is still alive', () => {
+      startRoundWithBet(10, 1000)
+      vi.setSystemTime(Date.now() + elapsedFor(2))
+
+      expect(engine.cashOut()).toBe(true)
+      expect(store.currentRound!.cashoutMultiplier).toBeGreaterThanOrEqual(2)
+      expect(store.currentRound!.cashoutMultiplier).toBeLessThan(2.05)
+    })
+
+    it('honours an auto-cashout target the stalled loop never got to fire', () => {
+      store.updateSettings({ autoCashoutTarget: 2 })
+      startRoundWithBet(3, 1000)
+      vi.setSystemTime(Date.now() + elapsedFor(3) + 3000)
+
+      // Target was reached before the crash in game time — it wins, at 2×
+      expect(engine.cashOut()).toBe(true)
+      expect(store.currentRound!.cashoutMultiplier).toBe(2)
+      expect(store.bankroll.totalReturned).toBe(2000)
+    })
+  })
+
   describe('bet gating', () => {
     it('refuses to start the run when the bet is rejected', () => {
       store.startRound(2.0)
@@ -114,7 +151,32 @@ describe('useFlameoutEngine', () => {
       // No ghost round: the phase parks at WAITING instead of launching a
       // betless flight (which auto-bet would then loop forever).
       expect(store.phase).toBe('WAITING')
-      expect(store.currentRound!.betAmount).toBe(0)
+      // …and the outcome drawn for the rejected bet is not left behind
+      expect(store.currentRound).toBeNull()
+    })
+
+    it('draws the crash point with the bet, never while the player is deciding', () => {
+      engine.startBettingPhase()
+
+      // Betting screen: nothing to peek at, in memory or in storage
+      expect(store.phase).toBe('WAITING')
+      expect(store.currentRound).toBeNull()
+      store.saveToLocalStorage()
+      expect(JSON.parse(localStorage.getItem('flameout-session')!).currentRound).toBeNull()
+
+      expect(engine.placeBetAndStart(1000)).toBe(true)
+      expect(store.currentRound!.crashPoint).toBeGreaterThanOrEqual(1)
+      expect(store.currentRound!.betAmount).toBe(1000)
+    })
+
+    it('auto-bet resumes the loop when the betting screen opens', () => {
+      store.updateSettings({ autoBet: true })
+      store.pendingBet = 1000
+
+      engine.startBettingPhase()
+
+      expect(store.currentRound!.betAmount).toBe(1000)
+      expect(['RUNNING', 'CRASHED']).toContain(store.phase) // CRASHED on an instant
     })
   })
 
