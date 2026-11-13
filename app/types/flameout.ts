@@ -61,9 +61,12 @@ export interface FloatingText {
 }
 
 /**
- * Item mix is balanced so the EV of a spawned item is exactly $0.00
- * (sum of weight × midpoint value = 0). The side game adds variance and a
- * skill element, not a money faucet — see gauntletSpawnEV() and its test.
+ * Item mix is balanced so the EV of a *spawned* item is exactly $0.00
+ * (sum of weight × midpoint value = 0) — see gauntletSpawnEV() and its test.
+ * That is the EV of flying blind, not of playing: the player steers, so
+ * collecting coins and dodging mines is +EV by design. It is a skill game
+ * bolted onto the crash game, which is why its result lives in sideGameNet
+ * and never touches the crash RTP.
  */
 export const GAUNTLET_ITEM_DEFS: Record<GauntletItemType, { color: string, glow: string, minValue: number, maxValue: number, weight: number }> = {
   coin: { color: '#fbbf24', glow: '#f59e0b', minValue: 100, maxValue: 500, weight: 40 },
@@ -124,8 +127,13 @@ export const SLOT_OUTCOMES = {
 
 export interface BankrollState {
   balance: number
+  // Total bought in: the starting bankroll plus every re-buy. P&L is measured
+  // against this, so busting and re-buying never wipes the loss off the books.
   initialBalance: number
   peakBalance: number
+  // Largest peak-to-trough drop seen so far, measured at settled balances.
+  // Optional-by-migration: sessions saved before it existed load it as 0.
+  maxDrawdown: number
   totalWagered: number
   totalReturned: number
   // Net result of variant side games (gauntlet items, jackpot spins).

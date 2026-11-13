@@ -27,26 +27,35 @@ export function useFlameoutEngine() {
   function startBettingPhase() {
     store.setPhase('WAITING')
 
-    // Pre-generate crash point
-    const { crashPoint, instant } = generateCrashPoint(store.settings.houseEdgePercent)
-    store.startRound(crashPoint, instant)
-
-    // Auto-place bet and start immediately — but only if the bet is actually
-    // accepted. A rejected bet (cleared input, over max, over balance) must
-    // park at the betting screen, not launch a betless flight that auto-bet
-    // would then loop forever.
-    if (store.settings.autoBet && store.placeBet(store.pendingBet)) {
-      startRunningPhase()
-      return
-    }
+    // No crash point exists yet — it is drawn when the bet is placed (see
+    // placeBetAndStart). Auto-bet places it right away; a rejected bet
+    // (cleared input, over max, over balance) parks at the betting screen
+    // instead of launching a betless flight that auto-bet would loop forever.
+    if (store.settings.autoBet) placeBetAndStart(store.pendingBet)
 
     // Otherwise wait for the player — the round starts on "Place Bet".
   }
 
   function placeBetAndStart(amountCents: number) {
     if (store.phase !== 'WAITING') return false
-    // A rejected bet must not start the round — nothing would be at stake.
-    if (!store.placeBet(amountCents)) return false
+
+    // The crash point is drawn here, at the moment of the bet, rather than
+    // staged while the player is still deciding. A staged outcome sat in the
+    // store — and in localStorage, once anything saved — where it could be
+    // read before betting. (A round staged by an older saved session, or by a
+    // test, is honoured as-is.)
+    const staged = store.currentRound !== null
+    if (!staged) {
+      const { crashPoint, instant } = generateCrashPoint(store.settings.houseEdgePercent)
+      store.startRound(crashPoint, instant)
+    }
+
+    // A rejected bet must not start the round — nothing would be at stake —
+    // and must not leave the outcome it just drew lying around.
+    if (!store.placeBet(amountCents)) {
+      if (!staged) store.discardRound()
+      return false
+    }
     startRunningPhase()
     return true
   }
@@ -118,8 +127,34 @@ export function useFlameoutEngine() {
   function cashOut(atMultiplier?: number): boolean {
     if (!store.canCashOut || !store.currentRound) return false
 
-    const multiplier = atMultiplier ?? store.currentRound.currentMultiplier
-    store.cashOut(multiplier)
+    let multiplier = atMultiplier
+    if (multiplier === undefined) {
+      // A manual cashout is resolved against the wall clock, never against
+      // the last painted frame. The loop only runs while the tab is being
+      // rendered, so when frames stop (hidden, occluded, or throttled tab)
+      // currentMultiplier goes stale while the round keeps flowing — and a
+      // keypress landing before the next frame would otherwise cash out a
+      // round that has already crashed. Same game-time order as tick():
+      // auto-cashout first, then the crash, else pay what the clock says.
+      const round = store.currentRound
+      const speed = store.settings.speedFactor
+      const elapsed = Date.now() - round.startedAt
+      const live = Math.max(1, currentMultiplier(elapsed, speed))
+      const target = store.settings.autoCashoutTarget
+
+      if (target && target <= round.crashPoint && live >= target) {
+        multiplier = target
+        store.updateMultiplier(target, Math.round(timeToMultiplier(target, speed)))
+      } else if (live >= round.crashPoint) {
+        crash()
+        return false
+      } else {
+        multiplier = live
+        store.updateMultiplier(live, elapsed)
+      }
+    }
+
+    if (!store.cashOut(multiplier)) return false
 
     // Stop the round immediately — don't keep running to the crash
     stopAnimation()

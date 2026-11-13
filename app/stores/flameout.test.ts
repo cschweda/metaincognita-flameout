@@ -154,6 +154,101 @@ describe('flameout store', () => {
     })
   })
 
+  describe('cashout multiplier guard', () => {
+    it('refuses a multiplier the round never reached', () => {
+      const store = freshStore()
+      store.startRound(2.0)
+      store.placeBet(100)
+      const balance = store.bankroll.balance
+
+      expect(store.cashOut(2.01)).toBe(false)
+      expect(store.cashOut(Number.NaN)).toBe(false)
+      expect(store.cashOut(0.5)).toBe(false)
+      expect(store.currentRound!.cashedOut).toBe(false)
+      expect(store.bankroll.balance).toBe(balance)
+
+      expect(store.cashOut(2.0)).toBe(true) // a tie still wins
+    })
+
+    it('rejects fractional-cent bets', () => {
+      const store = freshStore()
+      store.startRound(2.0)
+      expect(store.placeBet(100.5)).toBe(false)
+      expect(store.bankroll.balance).toBe(100_000)
+    })
+  })
+
+  describe('re-buy and drawdown accounting', () => {
+    it('keeps the lost bankroll in P&L after a re-buy', () => {
+      const store = freshStore() // $1,000
+      store.pendingBet = 100_000
+      playRound(store, { bet: 100_000 }) // all-in, lost
+      expect(store.phase).toBe('BUSTED')
+      expect(store.profitLoss).toBe(-100_000)
+
+      store.rebuy()
+      expect(store.bankroll.balance).toBe(100_000)
+      expect(store.bankroll.initialBalance).toBe(200_000)
+      expect(store.profitLoss).toBe(-100_000) // not reset to zero
+    })
+
+    it('reports the worst drawdown, not the current distance from the peak', () => {
+      const store = freshStore() // $1,000
+      playRound(store, { bet: 40_000 }) // lose $400 → $600
+      expect(store.maxDrawdown).toBe(40_000)
+
+      playRound(store, { bet: 60_000, cashoutAt: 2 }) // win → $1,200, new peak
+      expect(store.bankroll.peakBalance).toBe(120_000)
+      expect(store.maxDrawdown).toBe(40_000) // the old drop is still the max
+    })
+
+    it('carries the bust through a re-buy as the max drawdown', () => {
+      const store = freshStore()
+      playRound(store, { bet: 100_000 })
+      store.rebuy()
+      expect(store.maxDrawdown).toBe(100_000)
+    })
+  })
+
+  describe('bet problem message', () => {
+    it('says why Place Bet is disabled, and nothing when it is not', () => {
+      const store = freshStore() // $1,000, pending $10
+      expect(store.betProblem).toBeNull()
+
+      store.pendingBet = 0
+      expect(store.betProblem).toBe('Minimum bet is $0.10')
+
+      store.pendingBet = 100_001
+      expect(store.betProblem).toBe('Bet is more than your balance ($1000.00)')
+
+      store.bankroll.balance = 500_000
+      expect(store.betProblem).toBe('Maximum bet is $1000.00')
+    })
+  })
+
+  describe('session held by another tab', () => {
+    it('blocks betting and cashing out until this tab is chosen again', () => {
+      const store = freshStore()
+      store.startRound(5.0)
+      store.heldByOtherTab = true
+      expect(store.canPlaceBet).toBe(false)
+      expect(store.placeBet(100)).toBe(false)
+
+      store.heldByOtherTab = false
+      expect(store.placeBet(100)).toBe(true)
+      store.setPhase('RUNNING')
+      store.heldByOtherTab = true
+      expect(store.canCashOut).toBe(false)
+    })
+
+    it('is never persisted', () => {
+      const store = freshStore()
+      store.heldByOtherTab = true
+      store.saveToLocalStorage()
+      expect(JSON.parse(localStorage.getItem('flameout-session')!).heldByOtherTab).toBeUndefined()
+    })
+  })
+
   describe('round timing', () => {
     it('shiftRoundStart pushes the start timestamp forward (freezes elapsed)', () => {
       const store = freshStore()
@@ -219,6 +314,33 @@ describe('flameout store', () => {
       const store = useFlameoutStore()
       expect(store.loadFromLocalStorage()).toBe(false)
       expect(store.phase).toBe('SETUP')
+    })
+
+    it('rebuilds hostile history rows instead of trusting them', () => {
+      localStorage.setItem('flameout-session', JSON.stringify({
+        version: 3,
+        settings: {},
+        bankroll: { balance: 1234.5 },
+        pendingBet: -50.4,
+        nextRoundId: 1, // lower than the history's own ids
+        roundHistory: [
+          { id: 7, crashPoint: 2.5, bet: 100, cashoutMultiplier: 2, payout: 200, profit: 100, balanceAfter: 1100, timestamp: 1 },
+          { id: 'x', crashPoint: 2 }, // non-numeric id
+          { id: 8, crashPoint: 0.5 }, // impossible crash point
+          { id: 9, crashPoint: 3, bet: 'lots', profit: null, cashoutMultiplier: '<img>' },
+          null
+        ]
+      }))
+
+      setActivePinia(createPinia())
+      const store = useFlameoutStore()
+      expect(store.loadFromLocalStorage()).toBe(true)
+
+      expect(store.roundHistory.map(r => r.id)).toEqual([7, 9])
+      expect(store.roundHistory[1]).toMatchObject({ bet: 0, profit: 0, payout: 0, cashoutMultiplier: null })
+      expect(store.nextRoundId).toBe(10) // past every surviving id, never NaN
+      expect(store.pendingBet).toBe(0)
+      expect(store.bankroll.balance).toBe(1235)
     })
 
     it('persists and restores an in-flight round with its phase', () => {

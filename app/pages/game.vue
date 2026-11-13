@@ -15,6 +15,7 @@ function handleKeydown(e: KeyboardEvent) {
   if (isEditableTarget(e.target)) return
   if (e.code === 'Space') {
     e.preventDefault()
+    if (store.heldByOtherTab) return
     // Same gate as the Place Bet button — an invalid bet must not reach the
     // engine (placeBetAndStart also refuses, this just keeps them in sync)
     if (store.phase === 'WAITING' && store.canPlaceBet) {
@@ -25,11 +26,12 @@ function handleKeydown(e: KeyboardEvent) {
   }
 }
 
-onMounted(() => {
-  window.addEventListener('keydown', handleKeydown)
-
+function enterSession() {
+  // A ?demo link starts a throwaway session — but only when there is nothing
+  // to throw away. initializeGame() persists immediately, so without the load
+  // check any link carrying ?demo silently replaced a saved session.
   const demo = route.query.demo as string | undefined
-  if (demo && !store.isPlaying) {
+  if (demo && !store.isPlaying && !store.loadFromLocalStorage()) {
     // Auto-start a demo session
     const mode = (route.query.mode as GameMode) || 'classic'
     store.initializeGame({
@@ -59,10 +61,30 @@ onMounted(() => {
     return
   }
 
-  // Start the first round if we're waiting and no round is staged yet
-  if (store.phase === 'WAITING' && !store.currentRound) {
+  // Open the betting screen. With auto-bet on this places the bet straight
+  // away, so coming back to the game resumes the loop instead of waiting for
+  // a click the player already opted out of.
+  if (store.phase === 'WAITING') {
     engine.startBettingPhase()
   }
+}
+
+// Another tab took the session (see the storage listener in the layout).
+// Picking this tab back up re-reads what that tab saved and resolves any
+// round that played out in the meantime — exactly like a fresh page load.
+function continueHere() {
+  store.heldByOtherTab = false
+  if (!store.loadFromLocalStorage() || !store.isPlaying) {
+    router.replace('/')
+    return
+  }
+  enterSession()
+}
+
+onMounted(() => {
+  window.addEventListener('keydown', handleKeydown)
+  store.heldByOtherTab = false
+  enterSession()
 })
 
 onUnmounted(() => {
@@ -262,6 +284,25 @@ const liveAnnouncement = computed(() => {
         <FlameoutStats />
       </aside>
     </div>
+
+    <!-- The session moved to another tab — this one waits to be chosen -->
+    <UModal
+      :open="store.heldByOtherTab"
+      :dismissible="false"
+      :close="false"
+      title="Playing in another tab"
+      description="This session was just used in another tab or window, so this one has paused. Continuing here picks up from wherever that tab left off."
+    >
+      <template #body>
+        <div class="flex justify-end">
+          <UButton
+            color="primary"
+            label="Continue here"
+            @click="continueHere"
+          />
+        </div>
+      </template>
+    </UModal>
 
     <!-- New game confirmation -->
     <UModal

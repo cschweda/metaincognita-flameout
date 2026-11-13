@@ -72,6 +72,14 @@ function toggleAutoBet() {
         Place Bet ({{ formatCents(store.pendingBet) }})
       </button>
 
+      <p
+        v-if="store.betProblem"
+        role="status"
+        class="text-xs text-amber-400/90 -mt-1"
+      >
+        {{ store.betProblem }}
+      </p>
+
       <!-- RUNNING during a jackpot spin: round time is frozen, cashout locked -->
       <div
         v-else-if="store.phase === 'RUNNING' && store.jackpotSpinActive"

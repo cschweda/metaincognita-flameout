@@ -11,7 +11,7 @@ import type {
 import { DEFAULT_SETTINGS, GAME_MODES, dollarsToCents } from '~/types/flameout'
 import { clampNumber } from '~/utils/flameout-math'
 
-const STORAGE_KEY = 'flameout-session'
+export const STORAGE_KEY = 'flameout-session'
 
 // Bump when the persisted shape changes; loadFromLocalStorage migrates.
 // v3: in-flight rounds persist (currentRound + real phase) so a reload or
@@ -25,6 +25,7 @@ function emptyBankroll(balanceCents = 0): BankrollState {
     balance: balanceCents,
     initialBalance: balanceCents,
     peakBalance: balanceCents,
+    maxDrawdown: 0,
     totalWagered: 0,
     totalReturned: 0,
     sideGameNet: 0,
@@ -48,7 +49,40 @@ function sanitizeBankroll(raw: unknown): BankrollState {
   for (const key of Object.keys(clean) as (keyof BankrollState)[]) {
     clean[key] = asFiniteNumber(source[key], clean[key])
   }
+  // Money is integer cents and never negative; a hand-edited payload must not
+  // seed a fractional or negative balance that every later sum inherits.
+  clean.balance = Math.max(0, Math.round(clean.balance))
+  clean.maxDrawdown = Math.max(0, clean.maxDrawdown)
   return clean
+}
+
+/**
+ * Coerce one persisted history row; null if it can't be shown. Every field is
+ * rebuilt rather than trusted: the table, the analytics, and the round-id
+ * counter all read these, and a non-numeric id used to turn nextRoundId into
+ * NaN for the rest of the session.
+ */
+function sanitizeRecord(raw: unknown): RoundRecord | null {
+  if (!raw || typeof raw !== 'object') return null
+  const source = raw as Record<string, unknown>
+  const { id, crashPoint, cashoutMultiplier } = source
+  if (typeof crashPoint !== 'number' || !Number.isFinite(crashPoint) || crashPoint < 1) return null
+  if (typeof id !== 'number' || !Number.isInteger(id) || id < 1) return null
+  const record: RoundRecord = {
+    id,
+    crashPoint,
+    bet: Math.max(0, asFiniteNumber(source.bet, 0)),
+    cashoutMultiplier: typeof cashoutMultiplier === 'number' && Number.isFinite(cashoutMultiplier)
+      ? cashoutMultiplier
+      : null,
+    payout: asFiniteNumber(source.payout, 0),
+    profit: asFiniteNumber(source.profit, 0),
+    balanceAfter: asFiniteNumber(source.balanceAfter, 0),
+    timestamp: asFiniteNumber(source.timestamp, 0)
+  }
+  // Absent on legacy rows, and readers rely on that (`instant ?? …`)
+  if (typeof source.instant === 'boolean') record.instant = source.instant
+  return record
 }
 
 /** Coerce a persisted in-flight round; null if it can't be resolved. */
@@ -63,7 +97,7 @@ function sanitizeRound(raw: unknown): CurrentRound | null {
     crashPoint,
     instant: source.instant === true,
     currentMultiplier: Math.max(1, asFiniteNumber(source.currentMultiplier, 1)),
-    betAmount: Math.max(0, asFiniteNumber(source.betAmount, 0)),
+    betAmount: Math.max(0, Math.round(asFiniteNumber(source.betAmount, 0))),
     startedAt,
     elapsedMs: Math.max(0, asFiniteNumber(source.elapsedMs, 0)),
     cashedOut: source.cashedOut === true,
@@ -120,7 +154,12 @@ export const useFlameoutStore = defineStore('flameout', {
     pendingBet: 1000, // $10.00 default
 
     // Jackpot mode: freeze round time while the reels spin
-    jackpotSpinActive: false
+    jackpotSpinActive: false,
+
+    // Another tab wrote this session while the game page was open here. The
+    // game page parks behind a "continue here" prompt until the player picks
+    // this tab again. Never persisted.
+    heldByOtherTab: false
   }),
 
   getters: {
@@ -130,6 +169,7 @@ export const useFlameoutStore = defineStore('flameout', {
 
     canPlaceBet: (state): boolean => {
       return state.phase === 'WAITING'
+        && !state.heldByOtherTab
         && state.pendingBet >= state.settings.minBet
         && state.pendingBet <= Math.min(state.settings.maxBet, state.bankroll.balance)
     },
@@ -140,6 +180,20 @@ export const useFlameoutStore = defineStore('flameout', {
         && state.currentRound.betAmount > 0
         && !state.currentRound.cashedOut
         && !state.jackpotSpinActive
+        && !state.heldByOtherTab
+    },
+
+    // Why Place Bet is disabled, in the player's terms — null when it isn't.
+    betProblem: (state): string | null => {
+      if (state.phase !== 'WAITING') return null
+      const { minBet, maxBet } = state.settings
+      const dollars = (cents: number) => `$${(cents / 100).toFixed(2)}`
+      if (state.pendingBet < minBet) return `Minimum bet is ${dollars(minBet)}`
+      if (state.pendingBet > state.bankroll.balance) {
+        return `Bet is more than your balance (${dollars(state.bankroll.balance)})`
+      }
+      if (state.pendingBet > maxBet) return `Maximum bet is ${dollars(maxBet)}`
+      return null
     },
 
     winRate: (state): number => {
@@ -156,8 +210,13 @@ export const useFlameoutStore = defineStore('flameout', {
       return state.bankroll.balance - state.bankroll.initialBalance
     },
 
+    // Worst peak-to-trough drop of the session — not merely how far below the
+    // peak the balance sits right now, which recovers to 0 on every new high.
     maxDrawdown: (state): number => {
-      return state.bankroll.peakBalance - state.bankroll.balance
+      return Math.max(
+        state.bankroll.maxDrawdown,
+        state.bankroll.peakBalance - state.bankroll.balance
+      )
     },
 
     lastCrashPoints: (state): number[] => {
@@ -209,6 +268,11 @@ export const useFlameoutStore = defineStore('flameout', {
       }
     },
 
+    // Drop a round that never got a bet (its outcome must not outlive it).
+    discardRound() {
+      if (this.currentRound && this.currentRound.betAmount === 0) this.currentRound = null
+    },
+
     // Stamp the moment the multiplier starts climbing. Elapsed time is always
     // derived from this timestamp, so a round keeps flowing (and can be
     // resolved) even if the page unmounts mid-flight.
@@ -227,10 +291,11 @@ export const useFlameoutStore = defineStore('flameout', {
     // Returns whether the bet was accepted — callers must not start the run
     // on a rejected bet, or the round flies with nothing at stake.
     placeBet(amount: number): boolean {
-      if (!this.currentRound) return false
+      if (!this.currentRound || this.heldByOtherTab) return false
       // NaN slips through every comparison below (all false), which would
-      // poison the balance with NaN — reject it explicitly.
-      if (!Number.isFinite(amount)) return false
+      // poison the balance with NaN — reject it explicitly. Bets are whole
+      // cents: a fractional one would leave the balance fractional for good.
+      if (!Number.isInteger(amount)) return false
       if (amount > this.bankroll.balance) return false
       if (amount < this.settings.minBet) return false
       if (amount > this.settings.maxBet) return false
@@ -250,6 +315,10 @@ export const useFlameoutStore = defineStore('flameout', {
     cashOut(multiplier: number): boolean {
       if (!this.currentRound || this.currentRound.cashedOut) return false
       if (this.currentRound.betAmount === 0) return false
+      // The store is the last line of defence for the one rule that matters:
+      // nobody is paid a multiplier the round never reached.
+      if (!Number.isFinite(multiplier) || multiplier < 1) return false
+      if (multiplier > this.currentRound.crashPoint) return false
 
       this.currentRound.cashedOut = true
       this.currentRound.cashoutMultiplier = multiplier
@@ -317,6 +386,7 @@ export const useFlameoutStore = defineStore('flameout', {
       }
 
       this.currentRound = null
+      this.recordDrawdown()
 
       // Check bust
       if (this.bankroll.balance < this.settings.minBet) {
@@ -324,10 +394,22 @@ export const useFlameoutStore = defineStore('flameout', {
       }
     },
 
+    // Bank the current peak-to-balance drop if it is the worst so far.
+    recordDrawdown() {
+      const drawdown = this.bankroll.peakBalance - this.bankroll.balance
+      if (drawdown > this.bankroll.maxDrawdown) this.bankroll.maxDrawdown = drawdown
+    },
+
     rebuy(amountCents?: number) {
       const amount = amountCents || this.settings.startingBankroll
+      // The bust is the drawdown worth remembering — bank it before the
+      // peak resets to the fresh bankroll.
+      this.recordDrawdown()
+      // A re-buy is new money in, not a clean slate: add what was injected
+      // to the bought-in total so P&L keeps showing the bankroll just lost.
+      // (Resetting it made a busted-and-rebought session read "+$0.00".)
+      this.bankroll.initialBalance += amount - this.bankroll.balance
       this.bankroll.balance = amount
-      this.bankroll.initialBalance = amount
       this.bankroll.peakBalance = amount
       this.phase = 'WAITING'
     },
@@ -396,15 +478,18 @@ export const useFlameoutStore = defineStore('flameout', {
         this.settings = sanitizeSettings(data.settings)
         this.bankroll = sanitizeBankroll(data.bankroll)
         this.roundHistory = Array.isArray(data.roundHistory)
-          ? data.roundHistory.filter((r: unknown) =>
-              r && typeof r === 'object' && Number.isFinite((r as RoundRecord).crashPoint))
+          ? data.roundHistory
+              .map(sanitizeRecord)
+              .filter((r: RoundRecord | null): r is RoundRecord => r !== null)
+              .slice(-1000) // same cap settleRound enforces
           : []
 
-        // v1 payloads predate nextRoundId — derive it from history
+        // v1 payloads predate nextRoundId — derive it from history. Never
+        // below the history's own ids, or new rounds would collide with them.
         const maxHistoryId = this.roundHistory.reduce((max, r) => Math.max(max, r.id), 0)
-        this.nextRoundId = asFiniteNumber(data.nextRoundId, maxHistoryId + 1)
+        this.nextRoundId = Math.max(maxHistoryId + 1, Math.floor(asFiniteNumber(data.nextRoundId, 0)))
 
-        this.pendingBet = asFiniteNumber(data.pendingBet, 1000)
+        this.pendingBet = Math.max(0, Math.round(asFiniteNumber(data.pendingBet, 1000)))
         this.phase = GAME_PHASES.includes(data.phase) ? data.phase : 'WAITING'
         this.currentRound = sanitizeRound(data.currentRound)
 

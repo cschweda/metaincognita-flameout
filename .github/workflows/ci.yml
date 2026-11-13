@@ -11,7 +11,7 @@ jobs:
         os: [ubuntu-latest]
         # Matches .nvmrc and netlify.toml — CI should validate the same Node
         # major that builds the production deploy.
-        node: [20]
+        node: [22]
 
     steps:
       - name: Checkout
