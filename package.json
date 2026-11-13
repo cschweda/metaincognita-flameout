@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "nuxt build",
+    "build": "nuxt build && node scripts/write-csp.mjs",
     "dev": "nuxt dev",
     "dev:fresh": "./start-dev-server.sh",
     "preview": "nuxt preview",

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { STORAGE_KEY } from '~/stores/flameout'
+
 const route = useRoute()
 const router = useRouter()
 const store = useFlameoutStore()
@@ -27,9 +29,32 @@ function confirmLeave() {
   router.push('/')
 }
 
+// Two tabs share one saved session. Without this, each kept playing its own
+// stale copy and whichever saved last silently overwrote the other. `storage`
+// fires only in the tabs that did NOT write, so the rule is simple: adopt
+// what the other tab saved, and stop driving rounds here until the player
+// chooses this tab again (the game page shows the prompt).
+function onStorage(e: StorageEvent) {
+  // key === null is localStorage.clear()
+  if (e.key !== null && e.key !== STORAGE_KEY) return
+  engine.cleanup()
+  if (e.key === null || e.newValue === null) {
+    // The other tab ended the session (New Game) — nothing left to resume
+    store.$reset()
+    if (isGame.value) router.replace('/')
+    return
+  }
+  if (!store.loadFromLocalStorage()) return
+  if (isGame.value) store.heldByOtherTab = true
+}
+
+onMounted(() => window.addEventListener('storage', onStorage))
+onUnmounted(() => window.removeEventListener('storage', onStorage))
+
 // Runs on nav-link click before NuxtLink routes — parks the live session
 function saveSession() {
-  if (store.isPlaying) {
+  // A tab that has yielded the session holds a copy, not the truth
+  if (store.isPlaying && !store.heldByOtherTab) {
     store.saveToLocalStorage()
   }
 }
@@ -128,6 +153,7 @@ function saveSession() {
       <a
         href="https://github.com/cschweda/metaincognita-flameout"
         target="_blank"
+        rel="noopener noreferrer"
         class="flex items-center gap-1.5 text-xs text-neutral-500 hover:text-neutral-300 transition-colors"
       >
         <UIcon

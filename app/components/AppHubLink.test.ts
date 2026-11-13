@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { mount } from '@vue/test-utils'
-import { computed, defineComponent, h, ref } from 'vue'
+import { computed, defineComponent, h, onMounted, onUnmounted, ref } from 'vue'
 import AppHubLink from './AppHubLink.vue'
 import DefaultLayout from '~/layouts/default.vue'
 
@@ -27,6 +27,8 @@ const UModalStub = defineComponent({
 function mountLayoutAt(path: string) {
   vi.stubGlobal('computed', computed)
   vi.stubGlobal('ref', ref)
+  vi.stubGlobal('onMounted', onMounted)
+  vi.stubGlobal('onUnmounted', onUnmounted)
   vi.stubGlobal('useRoute', () => ({ path }))
   vi.stubGlobal('useRouter', () => ({ back: vi.fn(), push: vi.fn() }))
   vi.stubGlobal('useFlameoutEngine', () => ({ cleanup: vi.fn() }))

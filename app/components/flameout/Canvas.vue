@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { formatCents } from '~/types/flameout'
-import type { GauntletItem, JackpotTrigger, FloatingText, SlotSpinState, CurrentRound } from '~/types/flameout'
+import type { GauntletItem, JackpotTrigger, FloatingText, SlotSpinState } from '~/types/flameout'
 import { currentMultiplier as calcMultiplier } from '~/utils/flameout-math'
 import {
   makeStars,
@@ -119,8 +119,8 @@ function triggerShake(intensity: number, decay: number) {
 
 // One source of truth for the vertical scale, so the crash burst lands
 // exactly where the curve was drawn.
-function computeMaxM(round: CurrentRound): number {
-  return Math.max(round.currentMultiplier * 1.3, store.settings.autoCashoutTarget || 2, 2)
+function computeMaxM(multiplier: number): number {
+  return Math.max(multiplier * 1.3, store.settings.autoCashoutTarget || 2, 2)
 }
 
 function maxPlayerOffset(): number {
@@ -321,9 +321,11 @@ function draw() {
     reducedMotion
   }, stars, wisps)
 
-  if (!round) return
+  // The betting screen has no round yet (the crash point is drawn with the
+  // bet) but still shows the grid and the auto-cashout line.
+  if (!round && store.phase !== 'WAITING') return
 
-  const maxM = computeMaxM(round)
+  const maxM = computeMaxM(multiplier)
   const intensity = Math.min((multiplier - 1) / 8, 1)
   const margin = 40
 
@@ -358,6 +360,8 @@ function draw() {
     ctx.stroke()
     ctx.setLineDash([])
   }
+
+  if (!round) return
 
   // ── RUNNING phase ──────────────────────────────────────────────────────
   if (store.phase === 'RUNNING' && curvePoints.length > 1) {
@@ -695,7 +699,7 @@ watch(() => store.phase, (phase) => {
       const maxTime = last.x || 1
       const round = store.currentRound
       if (cssW > 0 && round) {
-        const maxM = computeMaxM(round)
+        const maxM = computeMaxM(round.currentMultiplier)
         let tipX: number, tipY: number
         if (isVariantMode.value) {
           tipX = cssW * JET_X_FRAC

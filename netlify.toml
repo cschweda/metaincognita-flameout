@@ -3,7 +3,7 @@
   publish = "dist"
 
 [build.environment]
-  NODE_VERSION = "20"
+  NODE_VERSION = "22"
 
 # Every app route is prerendered to a real file (full SSG), so anything
 # that falls through to this rule is a genuine 404 — don't soft-404 it
@@ -21,7 +21,10 @@
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
     Permissions-Policy = "camera=(), microphone=(), geolocation=()"
-    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self'; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'"
+    # The Content-Security-Policy is NOT here: it carries a sha256 for each
+    # inline script Nuxt emits, and one of those embeds the build id, so it
+    # can only be written after the build. See scripts/write-csp.mjs, which
+    # appends it to dist/_headers.
 
 # Cache static assets aggressively (hashed filenames from Vite)
 [[headers]]
